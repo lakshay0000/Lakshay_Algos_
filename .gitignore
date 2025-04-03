@@ -1,0 +1,11 @@
+*.csv
+*.log
+backTestResults
+*.txt
+*.json
+*.pyc
+*.sh
+venv
+myvenv
+environmentsetup
+myenv
