@@ -184,7 +184,7 @@ class algoLogic(optOverNightAlgoLogic):
             if not self.openPnl.empty:
                 for index, row in self.openPnl.iterrows():
 
-                    symstrike = float(row['Symbol'][-7:-2])
+                    # symstrike = float(row['Symbol'][-7:-2])
       
 
                     if UnderlyingPrice <= (row["IndexPrice"]-50):
