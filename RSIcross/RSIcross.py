@@ -191,7 +191,7 @@ class algoLogic(optOverNightAlgoLogic):
                         target = 0.3 * data["c"]
                         stoploss = 1.3 * data["c"]
 
-                        self.entryOrder(data["c"], putSym, lotSize, "SELL", {
+                        self.entryOrder(data["c"], putSym, 5*lotSize, "SELL", {
                                         "Target": target,
                                         "Stoploss": stoploss,
                                         "Expiry": expiryEpoch, },
