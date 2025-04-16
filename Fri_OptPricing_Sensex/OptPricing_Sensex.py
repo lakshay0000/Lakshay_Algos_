@@ -33,7 +33,7 @@ class algoLogic(optOverNightAlgoLogic):
         stike=[]
         if (symbol== "CE"):
             for i in range(0,21):
-                callSymotm = self.getCallSym(date, baseSym, IndexPrice, otmFactor=i)
+                callSymotm = self.getCallSym(date, baseSym, IndexPrice, otmFactor=i)         
                 try:
                     data = self.fetchAndCacheFnoHistData(
                         callSymotm, date)
