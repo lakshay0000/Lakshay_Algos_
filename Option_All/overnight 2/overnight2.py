@@ -15,11 +15,21 @@ class algoLogic(optOverNightAlgoLogic):
 
     # Define a method to get current expiry epoch
     def getCurrentExpiryEpoch(self, date, baseSym):
+        # Fetch expiry data for current and next expiry
         expiryData = getExpiryData(date, baseSym)
+        nextExpiryData = getExpiryData(date + 86400, baseSym)
 
         # Select appropriate expiry based on the current date
         expiry = expiryData["CurrentExpiry"]
 
+        expiryDatetime = datetime.strptime(expiry, "%d%b%y")
+
+        if self.humanTime.date() == expiryDatetime.date():
+            expiry = nextExpiryData["CurrentExpiry"]
+        else:
+            expiry = expiryData["CurrentExpiry"]
+
+        # Set expiry time to 15:20 and convert to epoch
         expiryDatetime = datetime.strptime(expiry, "%d%b%y")
         expiryDatetime = expiryDatetime.replace(hour=15, minute=20)
         expiryEpoch = expiryDatetime.timestamp()
@@ -52,29 +62,21 @@ class algoLogic(optOverNightAlgoLogic):
         df.dropna(inplace=True)
         df_5min.dropna(inplace=True)
 
-        results = []
-    # Calculate the 12-period EMA
-        df_5min['EMA12'] = df_5min['c'].ewm(span=12, adjust=False).mean()
 
-    # Calculate the 26-period EMA
-        df_5min['EMA26'] = df_5min['c'].ewm(span=26, adjust=False).mean()
-
-    # Calculate MACD (the difference between 12-period EMA and 26-period EMA)
-        df_5min['MACD'] = df_5min['EMA12'] - df_5min['EMA26'] 
-        # Calculate the 9-period EMA of MACD (Signal Line)
-        df_5min['Signal_Line'] = df_5min['MACD'].ewm(span=9, adjust=False).mean() 
+        # Calculate RSI indicator
+        df_5min["rsi"] = ta.RSI(df_5min["c"], timeperiod=14)
         df_5min.dropna(inplace=True)
 
+        # Filter dataframe from timestamp greater than start time timestamp
+        df_5min = df_5min[df_5min.index > (startEpoch-70)]
 
-        results = taa.supertrend(df_5min["h"], df_5min["l"], df_5min["c"], length=10, multiplier=3.0)
-        print(results)
-        df_5min["Supertrend"] = results["SUPERTd_10_3.0"]
-        df_5min.dropna(inplace=True)
-
-
-        df_5min['cross1'] = np.where((df_5min['MACD'] > df_5min['Signal_Line']) & (df_5min['MACD'].shift(1) < df_5min['Signal_Line'].shift(1)),1,0)
-        df_5min['cross2'] = np.where((df_5min['MACD'] < df_5min['Signal_Line']) & (df_5min['MACD'].shift(1) > df_5min['Signal_Line'].shift(1)),1,0)
-
+        # Determine crossover signals
+        df_5min["rsiCross60"] = np.where(
+            (df_5min["rsi"] > 60) & (df_5min["rsi"].shift(1) <= 60), 1, 0)
+        df_5min["rsiCross40"] = np.where(
+            (df_5min["rsi"] < 40) & (df_5min["rsi"].shift(1) >= 40), 1, 0)
+        df_5min["rsiCross50"] = np.where((df_5min["rsi"] >= 50) & (df_5min["rsi"].shift(
+            1) < 50), 1, np.where((df_5min["rsi"] <= 50) & (df_5min["rsi"].shift(1) > 50), 1, 0),)
 
         df.to_csv(
             f"{self.fileDir['backtestResultsCandleData']}{indexName}_1Min.csv")
@@ -83,10 +85,13 @@ class algoLogic(optOverNightAlgoLogic):
         )
 
         # Strategy Parameters
-        calln = 0
-        putn = 0
+
+        callTradeCounter = 0
+        putTradeCounter = 0
         lastIndexTimeData = [0, 0]
         last5MinIndexTimeData = [0, 0]
+        call = True
+        put = True
 
         # Loop through each timestamp in the DataFrame index
         for timeData in df.index:
@@ -98,15 +103,12 @@ class algoLogic(optOverNightAlgoLogic):
                 last5MinIndexTimeData.append(timeData-300)  
                 
             # Reset tradeCounter on new day
-            # callTradeCounter = (0 if self.humanTime.date() != datetime.fromtimestamp(
-            #     timeData).date() else callTradeCounter)
-            # putTradeCounter = (0 if self.humanTime.date() != datetime.fromtimestamp(
-            #     timeData).date() else putTradeCounter)
+            callTradeCounter = (0 if self.humanTime.date() != datetime.fromtimestamp(
+                timeData).date() else callTradeCounter)
+            putTradeCounter = (0 if self.humanTime.date() != datetime.fromtimestamp(
+                timeData).date() else putTradeCounter)
 
-            callTradeCounter = 0
-            putTradeCounter = 0
-
-            self.timeData = timeData
+            self.timeData = float(timeData)
             self.humanTime = datetime.fromtimestamp(timeData)
             print(self.humanTime)
 
@@ -121,7 +123,7 @@ class algoLogic(optOverNightAlgoLogic):
             # Log relevant information
             if lastIndexTimeData[1] in df.index and last5MinIndexTimeData[1] in df_5min.index:
                 self.strategyLogger.info(
-                    f"Datetime: {self.humanTime}\tClose: {df.at[lastIndexTimeData[1],'c']}")
+                    f"Datetime: {self.humanTime}\tClose: {df.at[lastIndexTimeData[1],'c']}\trsi60: {df_5min.at[last5MinIndexTimeData[1],'rsiCross60']}\trsi50: {df_5min.at[last5MinIndexTimeData[1],'rsiCross50']}\trsi40: {df_5min.at[last5MinIndexTimeData[1],'rsiCross40']}")
 
             # Update current price for open positions
             if not self.openPnl.empty:
@@ -143,32 +145,68 @@ class algoLogic(optOverNightAlgoLogic):
                     symSide = row["Symbol"]
                     symSide = symSide[len(symSide) - 2:]
 
-                    if row["CurrentPrice"] >= row["Target"]:
+                    if row["CurrentPrice"] <= row["Target"]:
                         exitType = "Target Hit"
                         self.exitOrder(index, exitType, row["Target"])
-                    elif row["CurrentPrice"] <= row["Stoploss"]:
+                    elif row["CurrentPrice"] >= row["Stoploss"]:
                         exitType = "Stoploss Hit"
                         self.exitOrder(index, exitType, row["Stoploss"])
                     elif self.timeData >= row["Expiry"]:
                         exitType = "Time Up"
                         self.exitOrder(index, exitType)
+                    elif last5MinIndexTimeData[1] in df_5min.index:
+                        if (df_5min.at[last5MinIndexTimeData[1], "c"] >= row["BaseSymStoploss"]) & (symSide == "CE"):  
+                            exitType = "Underlying Asset Candle Stoploss Hit"
+                            self.exitOrder(index, exitType)
+                        elif (df_5min.at[last5MinIndexTimeData[1], "c"] <= row["BaseSymStoploss"]) & (symSide == "PE"):
+                            exitType = "Underlying Asset Candle Stoploss Hit"
+                            self.exitOrder(index, exitType)
 
-                    if (index in self.openPnl.index) & (symSide == "CE"):
+                    if (index not in self.openPnl.index) & (symSide == "CE"):
                         callTradeCounter += 1
-                    elif (index in self.openPnl.index) & (symSide == "PE"):
+                    elif (index not in self.openPnl.index) & (symSide == "PE"):
                         putTradeCounter += 1
 
             # Check for entry signals and execute orders
             if ((timeData-300) in df_5min.index):
-                if (callTradeCounter < 3):
-                    if df_5min.at[last5MinIndexTimeData[1], "cross1"] == 1 and df_5min.at[last5MinIndexTimeData[1], "Supertrend"] == 1:
+
+                if (callTradeCounter < 3) and (call):
+                    if df_5min.at[last5MinIndexTimeData[1], "rsiCross40"] == 1 :
                         callSym = self.getCallSym(
-                            self.timeData, baseSym, df_5min.at[last5MinIndexTimeData[1], "c"])
+                            self.timeData, baseSym, df.at[last5MinIndexTimeData[1], "c"])
                         expiryEpoch = self.getCurrentExpiryEpoch(
                             self.timeData, baseSym)
                         lotSize = int(getExpiryData(
                             self.timeData, baseSym)["LotSize"])
+
+                        try:
+                            data = self.fetchAndCacheFnoHistData(
+                                callSym, last5MinIndexTimeData[1])
+                        except Exception as e:
+                            self.strategyLogger.info(e)
+
+                        target = 0.3 * data["c"]
+                        stoploss = 1.3 * data["c"]
+                        baseSymStoploss = max(
+                            [df_5min.at[last5MinIndexTimeData[0], "h"], df_5min.at[last5MinIndexTimeData[1], "h"],])
+
+                        self.entryOrder(data["c"], callSym, lotSize, "SELL", {
+                                        "Target": target,
+                                        "Stoploss": stoploss,
+                                        "BaseSymStoploss": baseSymStoploss,
+                                        "Expiry": expiryEpoch, }
+                                        )
+                        call= False
                 
+                if (callTradeCounter < 3) and (call==False) :
+                    if df_5min.at[last5MinIndexTimeData[1], "rsiCross40"] == 1 :
+                        callSym = self.getCallSym(
+                            self.timeData, baseSym, df.at[last5MinIndexTimeData[1], "c"])
+                        expiryEpoch = self.getCurrentExpiryEpoch(
+                            self.timeData, baseSym)
+                        lotSize = int(getExpiryData(
+                            self.timeData, baseSym)["LotSize"])
+
                         try:
                             data = self.fetchAndCacheFnoHistData(
                                 callSym, last5MinIndexTimeData[1])
@@ -177,18 +215,50 @@ class algoLogic(optOverNightAlgoLogic):
 
                         target = 1.7 * data["c"]
                         stoploss = 0.7 * data["c"]
+                        baseSymStoploss = max(
+                            [df_5min.at[last5MinIndexTimeData[0], "h"], df_5min.at[last5MinIndexTimeData[1], "h"],])
 
                         self.entryOrder(data["c"], callSym, lotSize, "BUY", {
                                         "Target": target,
                                         "Stoploss": stoploss,
+                                        "BaseSymStoploss": baseSymStoploss,
                                         "Expiry": expiryEpoch, }
-                                         )
-                        
+                                        )
+                        call=True
+                                       
 
-                if (putTradeCounter < 3):
-                    if df_5min.at[last5MinIndexTimeData[1], "cross2"] == 1 and df_5min.at[last5MinIndexTimeData[1], "Supertrend"] == -1:
+                if (putTradeCounter < 3) and (put):
+                    if df_5min.at[last5MinIndexTimeData[1], "rsiCross60"] == 1:
                         putSym = self.getPutSym(
-                            self.timeData, baseSym, df_5min.at[last5MinIndexTimeData[1], "c"])
+                            self.timeData, baseSym, df.at[last5MinIndexTimeData[1], "c"])
+                        expiryEpoch = self.getCurrentExpiryEpoch(
+                            self.timeData, baseSym)
+                        lotSize = int(getExpiryData(
+                            self.timeData, baseSym)["LotSize"])
+
+                        try:
+                            data = self.fetchAndCacheFnoHistData(
+                                putSym, last5MinIndexTimeData[1])
+                        except Exception as e:
+                            self.strategyLogger.info(e)
+
+                        target = 0.3 * data["c"]
+                        stoploss = 1.3 * data["c"]
+                        baseSymStoploss = min(
+                            [df_5min.at[last5MinIndexTimeData[0], "l"], df_5min.at[last5MinIndexTimeData[1], "l"],])
+
+                        self.entryOrder(data["c"], putSym, lotSize, "SELL", {
+                                        "Target": target,
+                                        "Stoploss": stoploss,
+                                        "BaseSymStoploss": baseSymStoploss,
+                                        "Expiry": expiryEpoch, },
+                                        )
+                        put=False
+
+                if (putTradeCounter < 3) and (put==False):
+                    if df_5min.at[last5MinIndexTimeData[1], "rsiCross60"] == 1:
+                        putSym = self.getPutSym(
+                            self.timeData, baseSym, df.at[last5MinIndexTimeData[1], "c"])
                         expiryEpoch = self.getCurrentExpiryEpoch(
                             self.timeData, baseSym)
                         lotSize = int(getExpiryData(
@@ -202,14 +272,16 @@ class algoLogic(optOverNightAlgoLogic):
 
                         target = 1.7 * data["c"]
                         stoploss = 0.7 * data["c"]
+                        baseSymStoploss = min(
+                            [df_5min.at[last5MinIndexTimeData[0], "l"], df_5min.at[last5MinIndexTimeData[1], "l"],])
 
                         self.entryOrder(data["c"], putSym, lotSize, "BUY", {
                                         "Target": target,
                                         "Stoploss": stoploss,
+                                        "BaseSymStoploss": baseSymStoploss,
                                         "Expiry": expiryEpoch, },
                                         )
-
-
+                        put= True
 
         # Calculate final PnL and combine CSVs
         self.pnlCalculator()
@@ -228,7 +300,7 @@ if __name__ == "__main__":
 
     # Define Start date and End date
     startDate = datetime(2023, 1, 1, 9, 15)
-    endDate = datetime(2023, 1, 25, 15, 30)
+    endDate = datetime(2023, 2, 25, 15, 30)
 
     # Create algoLogic object
     algo = algoLogic(devName, strategyName, version)
@@ -240,14 +312,14 @@ if __name__ == "__main__":
     # Execute the algorithm
     closedPnl, fileDir = algo.run(startDate, endDate, baseSym, indexName)
 
-    # print("Calculating Daily Pnl")
-    # dr = calculateDailyReport(
-    #     closedPnl, fileDir, timeFrame=timedelta(minutes=5), mtm=True
-    # )
+    print("Calculating Daily Pnl")
+    dr = calculateDailyReport(
+        closedPnl, fileDir, timeFrame=timedelta(minutes=5), mtm=True
+    )
 
     limitCapital(closedPnl, fileDir, maxCapitalAmount=1000)
 
     generateReportFile(dr, fileDir)
 
     endTime = datetime.now()
-    print(f"Done. Ended in {endTime-startTime}")
+    print(f"Done. Ended in {endTime-startTime}")    
