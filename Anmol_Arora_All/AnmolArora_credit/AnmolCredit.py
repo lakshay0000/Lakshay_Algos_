@@ -18,10 +18,10 @@ class algoLogic(optOverNightAlgoLogic):
         last_valid_i = 0
         data = None
         while True:
-            putsym= self.getPutSym(date, baseSym, indexPrice, otmFactor=i)
+            callsym= self.getCallSym(date, baseSym, indexPrice, otmFactor=i)
             
             try:
-                data = self.fetchAndCacheFnoHistData(putsym, date-60)
+                data = self.fetchAndCacheFnoHistData(callsym, date-60)
             except Exception as e:
                 self.strategyLogger.info(e)
             
@@ -185,7 +185,7 @@ class algoLogic(optOverNightAlgoLogic):
                     # symstrike = float(row['Symbol'][-7:-2])
       
 
-                    if UnderlyingPrice >= indexprice+(0.005*indexprice):
+                    if UnderlyingPrice <= indexprice-(0.005*indexprice):
                         exitType = "MarketTarget Hit"
                         self.exitOrder(index, exitType)
 
@@ -209,26 +209,26 @@ class algoLogic(optOverNightAlgoLogic):
             # Check for entry signals and execute orders
             if ((timeData-180) in df_3min.index) and self.openPnl.empty and self.humanTime.time() < time(15, 20):
                 
-                if df_3min.at[last3MinIndexTimeData[1], "Supertrend1.8"] == 1 and df_3min.at[last3MinIndexTimeData[1], "Supertrend3.6"] == 1: 
-                    putSym = self.getPutSym(
+                if df_3min.at[last3MinIndexTimeData[1], "Supertrend1.8"] == -1 and df_3min.at[last3MinIndexTimeData[1], "Supertrend3.6"] == -1: 
+                    callSym = self.getCallSym(
                         self.timeData, baseSym, df_3min.at[last3MinIndexTimeData[1], "c"],expiry= Currentexpiry,otmFactor=-1)
 
                     try:
                         data = self.fetchAndCacheFnoHistData(
-                            putSym, lastIndexTimeData[1])
+                            callSym, lastIndexTimeData[1])
                     except Exception as e:
                         self.strategyLogger.info(e)
 
                     Stoploss = data["c"]
-                    itmsym= putSym
+                    itmsym= callSym
 
                     # Entry Order for ATM
-                    putSym_CE = self.getPutSym(
+                    callSym_CE = self.getCallSym(
                         self.timeData, baseSym, df_3min.at[last3MinIndexTimeData[1], "c"],expiry= Currentexpiry,otmFactor=0)
 
                     try:
                         data = self.fetchAndCacheFnoHistData(
-                            putSym_CE, lastIndexTimeData[1])
+                            callSym_CE, lastIndexTimeData[1])
                     except Exception as e:
                         self.strategyLogger.info(e)
 
@@ -238,39 +238,39 @@ class algoLogic(optOverNightAlgoLogic):
                     # Entry Order for Hedge
                     otmFactorH = self.HedgeTrade(self.timeData, AtmData, df_3min.at[last3MinIndexTimeData[1], "c"], baseSym)
                     if otmFactorH != 0:
-                        putSym = self.getPutSym(
+                        callSym = self.getCallSym(
                             self.timeData, baseSym, df_3min.at[last3MinIndexTimeData[1], "c"],expiry= Currentexpiry,otmFactor=otmFactorH)
 
                         try:
                             data = self.fetchAndCacheFnoHistData(
-                                putSym, lastIndexTimeData[1])
+                                callSym, lastIndexTimeData[1])
                         except Exception as e:
                             self.strategyLogger.info(e)
 
-                        self.entryOrder(AtmData, putSym_CE, lotSize, "SELL", {"Expiry": expiryEpoch,},)
-                        self.entryOrder(data["c"], putSym, lotSize, "BUY", {"Expiry": expiryEpoch,},)                   
+                        self.entryOrder(AtmData, callSym_CE, lotSize, "SELL", {"Expiry": expiryEpoch,},)
+                        self.entryOrder(data["c"], callSym, lotSize, "BUY", {"Expiry": expiryEpoch,},)                   
 
 
                 # elif NewPosition:
-                #     putSym = self.getPutSym(
+                #     callSym = self.getCallSym(
                 #         self.timeData, baseSym, df_3min.at[last3MinIndexTimeData[1], "c"],expiry= Currentexpiry,otmFactor=-1)
 
                 #     try:
                 #         data = self.fetchAndCacheFnoHistData(
-                #             putSym, lastIndexTimeData[1])
+                #             callSym, lastIndexTimeData[1])
                 #     except Exception as e:
                 #         self.strategyLogger.info(e)
 
                 #     Stoploss = data["c"]
-                #     itmsym= putSym
+                #     itmsym= callSym
 
                 #     # Entry Order for ATM
-                #     putSym_CE = self.getPutSym(
+                #     callSym_CE = self.getCallSym(
                 #         self.timeData, baseSym, df_3min.at[last3MinIndexTimeData[1], "c"],expiry= Currentexpiry,otmFactor=0)
 
                 #     try:
                 #         data = self.fetchAndCacheFnoHistData(
-                #             putSym_CE, lastIndexTimeData[1])
+                #             callSym_CE, lastIndexTimeData[1])
                 #     except Exception as e:
                 #         self.strategyLogger.info(e)
 
@@ -280,17 +280,17 @@ class algoLogic(optOverNightAlgoLogic):
                 #     # Entry Order for Hedge
                 #     otmFactorH = self.HedgeTrade(self.timeData, AtmData, df_3min.at[last3MinIndexTimeData[1], "c"], baseSym)
                 #     if otmFactorH != 0:
-                #         putSym = self.getPutSym(
+                #         callSym = self.getCallSym(
                 #             self.timeData, baseSym, df_3min.at[last3MinIndexTimeData[1], "c"],expiry= Currentexpiry,otmFactor=otmFactorH)
 
                 #         try:
                 #             data = self.fetchAndCacheFnoHistData(
-                #                 putSym, lastIndexTimeData[1])
+                #                 callSym, lastIndexTimeData[1])
                 #         except Exception as e:
                 #             self.strategyLogger.info(e)
 
-                #         self.entryOrder(AtmData, putSym_CE, lotSize, "SELL", {"Expiry": expiryEpoch,},)
-                #         self.entryOrder(data["c"], putSym, lotSize, "BUY", {"Expiry": expiryEpoch,},)
+                #         self.entryOrder(AtmData, callSym_CE, lotSize, "SELL", {"Expiry": expiryEpoch,},)
+                #         self.entryOrder(data["c"], callSym, lotSize, "BUY", {"Expiry": expiryEpoch,},)
 
                 #     NewPosition = False
 
@@ -315,7 +315,7 @@ if __name__ == "__main__":
 
     # Define Start date and End date
     startDate = datetime(2021, 1, 1, 9, 15)
-    endDate = datetime(2025, 12, 31, 15, 30)
+    endDate = datetime(2025, 3, 31, 15, 30)
 
     # Create algoLogic object
     algo = algoLogic(devName, strategyName, version)

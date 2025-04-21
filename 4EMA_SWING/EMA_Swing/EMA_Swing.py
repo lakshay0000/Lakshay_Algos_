@@ -68,7 +68,7 @@ class algoLogic(optOverNightAlgoLogic):
 
         # Determine crossover signals
         df_15min["%KCross80"] = np.where((df_15min["%K"] > 80) & (df_15min["%K"].shift(1) <= 80), 1, 0)
-        df_15min["%KCross20"] = np.where((df_15min["%K"] < 20) & (df_15min["%K"].shift(1) >= 20), 1, 0)  
+        df_15min["%KCross20"] = np.where((df_15min["%K"] < 20) & (df_15min["%K"].shift(1) >= 20), 1, 0)
         
         df_15min["EMACross200"] = np.where((df_15min["EMA200"] > df_15min["c"]) & (df_15min["EMA200"].shift() < df_15min["c"].shift()), 1, 0)
         
@@ -127,8 +127,12 @@ class algoLogic(optOverNightAlgoLogic):
             # Update current price for open positions
             if not self.openPnl.empty:
                 for index, row in self.openPnl.iterrows():
-                    if lastIndexTimeData[1] in df.index:
-                        self.openPnl.at[index, "CurrentPrice"] = df.at[lastIndexTimeData[1], "c"]
+                    try:
+                        data = self.fetchAndCacheFnoHistData(
+                            row["Symbol"], lastIndexTimeData[1])
+                        self.openPnl.at[index, "CurrentPrice"] = data["c"]
+                    except Exception as e:
+                        self.strategyLogger.info(e)
 
             # Calculate and update PnL
             self.pnlCalculator()
@@ -196,9 +200,9 @@ class algoLogic(optOverNightAlgoLogic):
                             list1_high = max(list1)
                             ReEntryAllow = True
 
-                    # elif self.timeData >= row["Expiry"]:
-                    #     exitType = "Time Up"
-                    #     self.exitOrder(index, exitType)
+                    elif self.timeData >= row["Expiry"]:
+                        exitType = "Time Up"
+                        self.exitOrder(index, exitType)
     
 
             # tradecount = self.openPnl['Symbol'].str[-2:].value_counts()
@@ -213,13 +217,18 @@ class algoLogic(optOverNightAlgoLogic):
                         list1.append(df_15min.at[last15MinIndexTimeData[1], "h"])
                         callSym = self.getCallSym(
                             self.timeData, baseSym, df_15min.at[last15MinIndexTimeData[1], "c"],expiry= Currentexpiry)
-                        
-                        entry_price = df_15min.at[last15MinIndexTimeData[1], "c"]
+
+                        try:
+                            data = self.fetchAndCacheFnoHistData(
+                                callSym, lastIndexTimeData[1])
+                        except Exception as e:
+                            self.strategyLogger.info(e)
+
                         indexprice = df_15min.at[last15MinIndexTimeData[1], "c"]
 
-                        self.entryOrder(entry_price, callSym, lotSize, "SELL", {"Expiry": expiryEpoch, "IndexPrice":indexprice},)
+                        self.entryOrder(data["c"], callSym, lotSize, "BUY", {"Expiry": expiryEpoch, "IndexPrice":indexprice},)
                         PutEntryAllow = False  
-                        maxlist = maxlist[-2:] 
+                        maxlist = maxlist[-2:]
 
 
 
@@ -232,11 +241,15 @@ class algoLogic(optOverNightAlgoLogic):
                         callSym = self.getCallSym(
                             self.timeData, baseSym, df_15min.at[last15MinIndexTimeData[1], "c"],expiry= Currentexpiry)
 
-                        entry_price = df_15min.at[last15MinIndexTimeData[1], "c"]
+                        try:
+                            data = self.fetchAndCacheFnoHistData(
+                                callSym, lastIndexTimeData[1])
+                        except Exception as e:
+                            self.strategyLogger.info(e)
 
                         indexprice = df_15min.at[last15MinIndexTimeData[1], "c"]
 
-                        self.entryOrder(entry_price, callSym, lotSize, "SELL", {"Expiry": expiryEpoch, "IndexPrice":indexprice},)
+                        self.entryOrder(data["c"], callSym, lotSize, "BUY", {"Expiry": expiryEpoch, "IndexPrice":indexprice},)
                         ReEntryAllow = False  
 
 

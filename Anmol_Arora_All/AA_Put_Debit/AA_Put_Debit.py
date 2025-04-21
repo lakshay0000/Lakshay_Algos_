@@ -15,13 +15,12 @@ class algoLogic(optOverNightAlgoLogic):
 
     def HedgeTrade(self, date, AtmData, indexPrice, baseSym):
         i=1
-        last_valid_i = 0
-        data = None
+        data= None
         while True:
-            putsym= self.getPutSym(date, baseSym, indexPrice, otmFactor=i)
+            putSym= self.getPutSym(date, baseSym, indexPrice, otmFactor=i)
             
             try:
-                data = self.fetchAndCacheFnoHistData(putsym, date-60)
+                data = self.fetchAndCacheFnoHistData(putSym, date-60)
             except Exception as e:
                 self.strategyLogger.info(e)
             
@@ -30,15 +29,10 @@ class algoLogic(optOverNightAlgoLogic):
                 strikedist= i*50
                 risk = strikedist - reward
                 # Check for risk-reward ratio
-                if reward / risk >= 1:
-                    last_valid_i = i  # Update the last valid value of i
+                if risk / reward < 1:  
                     i += 1
                 else:
-                    # If the ratio is less than 1 on the first iteration, return 0
-                    if i == 1:
-                        return 0
-                    # Otherwise, return the last valid i
-                    return last_valid_i
+                    return i
             else:
                 i += 1
 
@@ -158,13 +152,13 @@ class algoLogic(optOverNightAlgoLogic):
             if not self.openPnl.empty and lastIndexTimeData[1] in df.index:
                 try:
                     data = self.fetchAndCacheFnoHistData(
-                        itmsym, lastIndexTimeData[1])
+                        otmsym, lastIndexTimeData[1])
                 except Exception as e:
                     self.strategyLogger.info(e)
 
-                if  Stoploss - data["c"] >=5:
-                    Stoploss= Stoploss-5
-                    self.strategyLogger.info(f"Datetime: {self.humanTime}\t Stoploss updated to {Stoploss} for {itmsym}")
+                if data["c"] - Stoploss >=5:
+                    Stoploss= Stoploss+5
+                    self.strategyLogger.info(f"Datetime: {self.humanTime}\t Stoploss updated to {Stoploss} for {otmsym}")
                     lastupdated= self.humanTime.time()
 
             
@@ -185,11 +179,11 @@ class algoLogic(optOverNightAlgoLogic):
                     # symstrike = float(row['Symbol'][-7:-2])
       
 
-                    if UnderlyingPrice >= indexprice+(0.005*indexprice):
+                    if UnderlyingPrice <= indexprice-(0.005*indexprice) :
                         exitType = "MarketTarget Hit"
                         self.exitOrder(index, exitType)
 
-                    elif row["PositionStatus"] == -1 and row["CurrentPrice"] >= Stoploss:
+                    elif row["PositionStatus"] == 1 and row["CurrentPrice"] <= Stoploss:
                         StoplossExit=True
 
                     elif self.humanTime.time() >= time(15, 20):
@@ -200,6 +194,7 @@ class algoLogic(optOverNightAlgoLogic):
                 for index, row in self.openPnl.iterrows():
                     self.exitOrder(index, f"STOPLOSS HIT AT:- {Stoploss}\t{lastupdated}")
                     StoplossExit= False
+
     
 
             # tradecount = self.openPnl['Symbol'].str[-2:].value_counts()
@@ -209,9 +204,9 @@ class algoLogic(optOverNightAlgoLogic):
             # Check for entry signals and execute orders
             if ((timeData-180) in df_3min.index) and self.openPnl.empty and self.humanTime.time() < time(15, 20):
                 
-                if df_3min.at[last3MinIndexTimeData[1], "Supertrend1.8"] == 1 and df_3min.at[last3MinIndexTimeData[1], "Supertrend3.6"] == 1: 
+                if df_3min.at[last3MinIndexTimeData[1], "Supertrend1.8"] == -1 and df_3min.at[last3MinIndexTimeData[1], "Supertrend3.6"] == -1: 
                     putSym = self.getPutSym(
-                        self.timeData, baseSym, df_3min.at[last3MinIndexTimeData[1], "c"],expiry= Currentexpiry,otmFactor=-1)
+                        self.timeData, baseSym, df_3min.at[last3MinIndexTimeData[1], "c"],expiry= Currentexpiry,otmFactor=1)
 
                     try:
                         data = self.fetchAndCacheFnoHistData(
@@ -220,7 +215,7 @@ class algoLogic(optOverNightAlgoLogic):
                         self.strategyLogger.info(e)
 
                     Stoploss = data["c"]
-                    itmsym= putSym
+                    otmsym= putSym
 
                     # Entry Order for ATM
                     putSym_CE = self.getPutSym(
@@ -247,8 +242,10 @@ class algoLogic(optOverNightAlgoLogic):
                         except Exception as e:
                             self.strategyLogger.info(e)
 
-                        self.entryOrder(AtmData, putSym_CE, lotSize, "SELL", {"Expiry": expiryEpoch,},)
-                        self.entryOrder(data["c"], putSym, lotSize, "BUY", {"Expiry": expiryEpoch,},)                   
+                        lastupdated= self.humanTime.time()
+
+                        self.entryOrder(AtmData, putSym_CE, lotSize, "BUY", {"Expiry": expiryEpoch,},)
+                        self.entryOrder(data["c"], putSym, lotSize, "SELL", {"Expiry": expiryEpoch,},)   
 
 
                 # elif NewPosition:
@@ -262,7 +259,7 @@ class algoLogic(optOverNightAlgoLogic):
                 #         self.strategyLogger.info(e)
 
                 #     Stoploss = data["c"]
-                #     itmsym= putSym
+                #     otmsym= putSym
 
                 #     # Entry Order for ATM
                 #     putSym_CE = self.getPutSym(
@@ -315,7 +312,7 @@ if __name__ == "__main__":
 
     # Define Start date and End date
     startDate = datetime(2021, 1, 1, 9, 15)
-    endDate = datetime(2025, 12, 31, 15, 30)
+    endDate = datetime(2025, 3, 31, 15, 30)
 
     # Create algoLogic object
     algo = algoLogic(devName, strategyName, version)
@@ -337,4 +334,4 @@ if __name__ == "__main__":
     # generateReportFile(dr, fileDir)
 
     endTime = datetime.now()
-    print(f"Done. Ended in {endTime-startTime}")
+    print(f"Done. Ended in {endTime-startTime}")  
