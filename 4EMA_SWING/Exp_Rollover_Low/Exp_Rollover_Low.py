@@ -70,7 +70,7 @@ class algoLogic(optOverNightAlgoLogic):
         df_15min["%KCross80"] = np.where((df_15min["%K"] > 80) & (df_15min["%K"].shift(1) <= 80), 1, 0)
         df_15min["%KCross20"] = np.where((df_15min["%K"] < 20) & (df_15min["%K"].shift(1) >= 20), 1, 0)
         
-        df_15min["EMACross200"] = np.where((df_15min["EMA200"] > df_15min["c"]) & (df_15min["EMA200"].shift() < df_15min["c"].shift()), 1, 0)
+        df_15min["EMACross200"] = np.where((df_15min["EMA200"] < df_15min["c"]) & (df_15min["EMA200"].shift() > df_15min["c"].shift()), 1, 0)
         
 
         df.to_csv(
@@ -81,10 +81,10 @@ class algoLogic(optOverNightAlgoLogic):
 
         # Strategy Parameters
         flag1 = False
-        PutEntryAllow = False
-        swinghigh=None
-        Closelist= []
-        maxlist=[]  
+        CallEntryAllow = False
+        swinglow=None
+        Closelist= []  
+        lowlist= []
         lastIndexTimeData = [0, 0]
         last15MinIndexTimeData = [0, 0]
         list1=[]
@@ -92,7 +92,7 @@ class algoLogic(optOverNightAlgoLogic):
         MidFlag= False
 
 
-        Currentexpiry = getExpiryData(startEpoch, baseSym)['CurrentExpiry']
+        Currentexpiry = getExpiryData(startEpoch, baseSym)['MonthlyExpiry']
         expiryDatetime = datetime.strptime(Currentexpiry, "%d%b%y").replace(hour=15, minute=20)
         expiryEpoch= expiryDatetime.timestamp()
         lotSize = int(getExpiryData(self.timeData, baseSym)["LotSize"])
@@ -104,6 +104,7 @@ class algoLogic(optOverNightAlgoLogic):
             self.timeData = float(timeData)
             self.humanTime = datetime.fromtimestamp(timeData)
             print(self.humanTime)
+
 
 
             # Skip time periods outside trading hours
@@ -140,78 +141,105 @@ class algoLogic(optOverNightAlgoLogic):
             self.pnlCalculator()
             
             if ((timeData-900) in df_15min.index):
-                if df_15min.at[last15MinIndexTimeData[1], "%KCross80"] == 1 and flag1== False:              
+                if df_15min.at[last15MinIndexTimeData[1], "%KCross20"] == 1 and flag1== False:              
                     flag1= True
                     Closelist= []
-                    self.strategyLogger.info(f"{self.humanTime}\t%K_high: {df_15min.at[last15MinIndexTimeData[1], '%K']}\tclose: {df_15min.at[last15MinIndexTimeData[1], 'c']}")
+                    self.strategyLogger.info(f"{self.humanTime}\t%K_Low: {df_15min.at[last15MinIndexTimeData[1], '%K']}\tclose: {df_15min.at[last15MinIndexTimeData[1], 'c']}")
 
             if self.humanTime.date() >= (expiryDatetime - timedelta(days=1)).date():
-                Currentexpiry = getExpiryData(self.timeData, baseSym)['NextExpiry']
+                Currentexpiry = getExpiryData(self.timeData+(86400*2), baseSym)['MonthlyExpiry']
                 expiryDatetime = datetime.strptime(Currentexpiry, "%d%b%y").replace(hour=15, minute=20)
                 expiryEpoch= expiryDatetime.timestamp()
-            
-            if ((timeData-900) in df_15min.index):
-                if flag1:
-                    Closelist.append(df_15min.at[last15MinIndexTimeData[1], "h"])
-                    if df_15min.at[last15MinIndexTimeData[1], "%KCross20"] == 1:
-                        flag1=False
-                        swinghigh= max(Closelist)
-                        maxlist.append(swinghigh)
-                        self.strategyLogger.info(f"{self.humanTime}swinghigh:{swinghigh}\t%K_Low: {df_15min.at[last15MinIndexTimeData[1], '%K']}\tclose: {df_15min.at[last15MinIndexTimeData[1], 'c']}\tswingcomplte\t maxlist: {maxlist}")
-                        if MidFlag==True:
-                            MidFlag=False
-                            Midlist.clear()
 
-                        MidFlag=True
+            if flag1:
+                Closelist.append(df_15min.at[last15MinIndexTimeData[1], "l"])
+                if df_15min.at[last15MinIndexTimeData[1], "%KCross80"] == 1:
+                    flag1=False
+                    swinglow = min(Closelist)
+                    lowlist.append(swinglow)
+                    self.strategyLogger.info(f"{self.humanTime}\tswinglow:{swinglow}\t%K_Low: {df_15min.at[last15MinIndexTimeData[1], '%K']}\tclose: {df_15min.at[last15MinIndexTimeData[1], 'c']}\tswingcomplte")
+                    if MidFlag==True:
+                        MidFlag=False
+                        Midlist.clear()
+
+                    MidFlag=True
 
 
-            if ((timeData-900) in df_15min.index) and self.openPnl.empty:
-                if  len(maxlist)>=2 and (df_15min.at[last15MinIndexTimeData[1], "EMA_High"] - df_15min.at[last15MinIndexTimeData[1], "EMA_Low"])<50:
-                    last_two_max = maxlist[-2:]
+
+            if ((timeData-900) in df_15min.index) and self.openPnl.empty:   
+                if  len(lowlist)>=2 and (df_15min.at[last15MinIndexTimeData[1], "EMA_High"] - df_15min.at[last15MinIndexTimeData[1], "EMA_Low"])<50:
+                    last_two_min = lowlist[-2:]
                     if Midlist:
-                        Midhigh = max(Midlist)
-                        last_two_max.append(Midhigh)  
+                        Midlow = min(Midlist)
+                        last_two_min.append(Midlow)  
                              
                     # Find the maximum of the updated last_two_max list
-                    Twoswinghigh = max(last_two_max)
+                    Twoswinglow = min(last_two_min)
 
-                    PutEntryAllow = True
+                    CallEntryAllow = True
                     ReEntryAllow = False
                     list1.clear()
-                    self.strategyLogger.info(f"{self.humanTime}\tTwoswinghigh: {Twoswinghigh}\tPutEntryAllow: {PutEntryAllow}\tMidhigh: {Midhigh}")
+                    self.strategyLogger.info(f"{self.humanTime}\tTwoswinglow: {Twoswinglow}\tCallEntryAllow: {CallEntryAllow}\tMidlow: {Midlow}")
             
             if not self.openPnl.empty and (timeData-900) in df_15min.index:
-                list1.append(df_15min.at[last15MinIndexTimeData[1], "h"])
-            
+                list1.append(df_15min.at[last15MinIndexTimeData[1], "l"])
+
             if lastIndexTimeData[1] in df.index:
                 UnderlyingPrice = df.at[lastIndexTimeData[1], "c"]
 
 
-                                                                    
 
             # Check for exit conditions and execute exit orders
             if not self.openPnl.empty:
                 for index, row in self.openPnl.iterrows():
 
                     symstrike = float(row['Symbol'][-7:-2])
-      
-
-                    if UnderlyingPrice <= (row["IndexPrice"]-50):
+                    
+                    if UnderlyingPrice <= (row["IndexPrice"]+50):
                         exitType = "MarketStoploss"
                         self.exitOrder(index, exitType)
-                        list1_high = max(list1)
+                        list1_low = min(list1)
                         ReEntryAllow = True
-                    
+
                     elif (timeData-900) in df_15min.index:
                         if df_15min.at[last15MinIndexTimeData[1], "EMACross200"] == 1:
                             exitType = "EMACross200"
                             self.exitOrder(index, exitType)
-                            list1_high = max(list1)
+                            list1_low = min(list1)
                             ReEntryAllow = True
+
+                    elif row["CurrentPrice"] <= row["Target"]:
+                        exitType = "TargetHit"
+                        self.exitOrder(index, exitType)
+                        callSym = self.getCallSym(
+                            self.timeData, baseSym, df.at[lastIndexTimeData[1], "c"],expiry= Currentexpiry)
+
+                        try:
+                            data = self.fetchAndCacheFnoHistData(
+                                callSym, lastIndexTimeData[1])
+                        except Exception as e:
+                            self.strategyLogger.info(e)
+
+                        target = 0.3 * data["c"]
+
+                        self.entryOrder(data["c"], callSym, lotSize, "SELL", {"Expiry": expiryEpoch, "IndexPrice":indexprice, "Target":target},)
+
 
                     elif self.timeData >= row["Expiry"]:
                         exitType = "Time Up"
-                        self.exitOrder(index, exitType)
+                        self.exitOrder(index, exitType)  
+                        callSym = self.getCallSym(
+                            self.timeData, baseSym, df.at[lastIndexTimeData[1], "c"],expiry= Currentexpiry)
+
+                        try:
+                            data = self.fetchAndCacheFnoHistData(
+                                callSym, lastIndexTimeData[1])
+                        except Exception as e:
+                            self.strategyLogger.info(e)
+
+                        target = 0.3 * data["c"]
+
+                        self.entryOrder(data["c"], callSym, lotSize, "SELL", {"Expiry": expiryEpoch, "IndexPrice":indexprice, "Target":target},)
     
 
             # tradecount = self.openPnl['Symbol'].str[-2:].value_counts()
@@ -221,51 +249,52 @@ class algoLogic(optOverNightAlgoLogic):
             # Check for entry signals and execute orders
             if ((timeData-900) in df_15min.index) and self.openPnl.empty:
                 
-                if (PutEntryAllow): 
-                    if df_15min.at[last15MinIndexTimeData[1], "c"]> Twoswinghigh:
-                        list1.append(df_15min.at[last15MinIndexTimeData[1], "h"])
-                        putSym = self.getPutSym(
+                if (CallEntryAllow): 
+                    if df_15min.at[last15MinIndexTimeData[1], "c"]< Twoswinglow:
+                        list1.append(df_15min.at[last15MinIndexTimeData[1], "l"])
+                        callSym = self.getCallSym(
                             self.timeData, baseSym, df_15min.at[last15MinIndexTimeData[1], "c"],expiry= Currentexpiry)
 
                         try:
                             data = self.fetchAndCacheFnoHistData(
-                                putSym, lastIndexTimeData[1])
+                                callSym, lastIndexTimeData[1])
                         except Exception as e:
                             self.strategyLogger.info(e)
 
                         indexprice = df_15min.at[last15MinIndexTimeData[1], "c"]
+                        target = 0.3 * data["c"]
 
-                        self.entryOrder(data["c"], putSym, lotSize, "SELL", {"Expiry": expiryEpoch, "IndexPrice":indexprice},)
-                        PutEntryAllow = False  
-                        maxlist = maxlist[-2:]
+                        self.entryOrder(data["c"], callSym, lotSize, "SELL", {"Expiry": expiryEpoch, "IndexPrice":indexprice, "Target":target},)
+                        CallEntryAllow = False  
+                        lowlist = lowlist[-2:]
 
 
 
                 if (ReEntryAllow): 
-                    if df_15min.at[last15MinIndexTimeData[1], "c"]> list1_high:
-                        self.strategyLogger.info(f"{self.humanTime}\tlist1_high: {list1_high}")
+                    if df_15min.at[last15MinIndexTimeData[1], "c"]< list1_low:
+                        self.strategyLogger.info(f"{self.humanTime}\tlist1_low: {list1_low}")
 
                         list1.clear()
-                        list1.append(df_15min.at[last15MinIndexTimeData[1], "h"])
-                        putSym = self.getPutSym(
+                        list1.append(df_15min.at[last15MinIndexTimeData[1], "l"])
+                        callSym = self.getCallSym(
                             self.timeData, baseSym, df_15min.at[last15MinIndexTimeData[1], "c"],expiry= Currentexpiry)
 
                         try:
                             data = self.fetchAndCacheFnoHistData(
-                                putSym, lastIndexTimeData[1])
+                                callSym, lastIndexTimeData[1])
                         except Exception as e:
                             self.strategyLogger.info(e)
 
                         indexprice = df_15min.at[last15MinIndexTimeData[1], "c"]
+                        target = 0.3 * data["c"]
 
-                        self.entryOrder(data["c"], putSym, lotSize, "SELL", {"Expiry": expiryEpoch, "IndexPrice":indexprice},)
+                        self.entryOrder(data["c"], callSym, lotSize, "SELL", {"Expiry": expiryEpoch, "IndexPrice":indexprice, "Target":target},)
                         ReEntryAllow = False  
-            
+
             if ((timeData-900) in df_15min.index):
                 if MidFlag:
-                        Midlist.append(df_15min.at[last15MinIndexTimeData[1], "h"])
+                        Midlist.append(df_15min.at[last15MinIndexTimeData[1], "l"])
 
-            
 
 
 

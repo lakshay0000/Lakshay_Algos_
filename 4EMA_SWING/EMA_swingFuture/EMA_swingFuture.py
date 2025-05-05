@@ -88,6 +88,9 @@ class algoLogic(optOverNightAlgoLogic):
         lastIndexTimeData = [0, 0]
         last15MinIndexTimeData = [0, 0]
         list1=[]
+        Midlist=[]
+        MidFlag= False
+
 
 
         Currentexpiry = getExpiryData(startEpoch, baseSym)['CurrentExpiry']
@@ -143,29 +146,37 @@ class algoLogic(optOverNightAlgoLogic):
                 Currentexpiry = getExpiryData(self.timeData, baseSym)['NextExpiry']
                 expiryDatetime = datetime.strptime(Currentexpiry, "%d%b%y").replace(hour=15, minute=20)
                 expiryEpoch= expiryDatetime.timestamp()
+            
+            if ((timeData-900) in df_15min.index):
+                if flag1:
+                    Closelist.append(df_15min.at[last15MinIndexTimeData[1], "h"])
+                    if df_15min.at[last15MinIndexTimeData[1], "%KCross20"] == 1:
+                        flag1=False
+                        swinghigh= max(Closelist)
+                        maxlist.append(swinghigh)
+                        self.strategyLogger.info(f"{self.humanTime}swinghigh:{swinghigh}\t%K_Low: {df_15min.at[last15MinIndexTimeData[1], '%K']}\tclose: {df_15min.at[last15MinIndexTimeData[1], 'c']}\tswingcomplte\t maxlist: {maxlist}")
+                        if MidFlag==True:
+                            MidFlag=False
+                            Midlist.clear()
 
-            if flag1:
-                Closelist.append(df_15min.at[last15MinIndexTimeData[1], "h"])
-                if df_15min.at[last15MinIndexTimeData[1], "%KCross20"] == 1:
-                    flag1=False
-                    swinghigh= max(Closelist)
-                    maxlist.append(swinghigh)
-                    self.strategyLogger.info(f"{self.humanTime}swinghigh:{swinghigh}\t%K_Low: {df_15min.at[last15MinIndexTimeData[1], '%K']}\tclose: {df_15min.at[last15MinIndexTimeData[1], 'c']}\tswingcomplte")
-
+                        MidFlag=True
 
 
             if ((timeData-900) in df_15min.index) and self.openPnl.empty:
                 if  len(maxlist)>=2 and (df_15min.at[last15MinIndexTimeData[1], "EMA_High"] - df_15min.at[last15MinIndexTimeData[1], "EMA_Low"])<50:
                     last_two_max = maxlist[-2:]
-                    if last_two_max[1] > last_two_max[0]:
-                        Twoswinghigh= last_two_max[1]
-                    elif last_two_max[1] < last_two_max[0]:
-                        Twoswinghigh= last_two_max[0]
+                    if Midlist:
+                        Midhigh = max(Midlist)
+                        last_two_max.append(Midhigh)  
+                             
+                    # Find the maximum of the updated last_two_max list
+                    Twoswinghigh = max(last_two_max)
 
                     PutEntryAllow = True
                     ReEntryAllow = False
                     list1.clear()
-                    self.strategyLogger.info(f"{self.humanTime}\tTwoswinghigh: {Twoswinghigh}\tPutEntryAllow: {PutEntryAllow}")
+                    self.strategyLogger.info(f"{self.humanTime}\tTwoswinghigh: {Twoswinghigh}\tPutEntryAllow: {PutEntryAllow}\tMidhigh: {Midhigh}")
+            
             
             if not self.openPnl.empty and (timeData-900) in df_15min.index:
                 list1.append(df_15min.at[last15MinIndexTimeData[1], "h"])
@@ -180,7 +191,7 @@ class algoLogic(optOverNightAlgoLogic):
             if not self.openPnl.empty:
                 for index, row in self.openPnl.iterrows():
 
-                    symstrike = float(row['Symbol'][-7:-2])
+                    # symstrike = float(row['Symbol'][-7:-2])
       
 
                     if UnderlyingPrice <= (row["IndexPrice"]-50):
@@ -211,13 +222,11 @@ class algoLogic(optOverNightAlgoLogic):
                 if (PutEntryAllow): 
                     if df_15min.at[last15MinIndexTimeData[1], "c"]> Twoswinghigh:
                         list1.append(df_15min.at[last15MinIndexTimeData[1], "h"])
-                        callSym = self.getCallSym(
-                            self.timeData, baseSym, df_15min.at[last15MinIndexTimeData[1], "c"],expiry= Currentexpiry)
                         
                         entry_price = df_15min.at[last15MinIndexTimeData[1], "c"]
                         indexprice = df_15min.at[last15MinIndexTimeData[1], "c"]
 
-                        self.entryOrder(entry_price, callSym, lotSize, "SELL", {"Expiry": expiryEpoch, "IndexPrice":indexprice},)
+                        self.entryOrder(entry_price, "NIFTY50", lotSize, "BUY", {"Expiry": expiryEpoch, "IndexPrice":indexprice},)
                         PutEntryAllow = False  
                         maxlist = maxlist[-2:] 
 
@@ -229,15 +238,17 @@ class algoLogic(optOverNightAlgoLogic):
 
                         list1.clear()
                         list1.append(df_15min.at[last15MinIndexTimeData[1], "h"])
-                        callSym = self.getCallSym(
-                            self.timeData, baseSym, df_15min.at[last15MinIndexTimeData[1], "c"],expiry= Currentexpiry)
 
                         entry_price = df_15min.at[last15MinIndexTimeData[1], "c"]
 
                         indexprice = df_15min.at[last15MinIndexTimeData[1], "c"]
 
-                        self.entryOrder(entry_price, callSym, lotSize, "SELL", {"Expiry": expiryEpoch, "IndexPrice":indexprice},)
+                        self.entryOrder(entry_price, "NIFTY50", lotSize, "BUY", {"Expiry": expiryEpoch, "IndexPrice":indexprice},)
                         ReEntryAllow = False  
+
+            if ((timeData-900) in df_15min.index):
+                if MidFlag:
+                        Midlist.append(df_15min.at[last15MinIndexTimeData[1], "h"])
 
 
 
@@ -271,13 +282,13 @@ if __name__ == "__main__":
     closedPnl, fileDir = algo.run(startDate, endDate, baseSym, indexName)
 
     print("Calculating Daily Pnl")
-    dr = calculateDailyReport(
-        closedPnl, fileDir, timeFrame=timedelta(minutes=5), mtm=True
-    )
+    # dr = calculateDailyReport(
+    #     closedPnl, fileDir, timeFrame=timedelta(minutes=5), mtm=True
+    # )
 
-    limitCapital(closedPnl, fileDir, maxCapitalAmount=1000)
+    # limitCapital(closedPnl, fileDir, maxCapitalAmount=1000)
 
-    generateReportFile(dr, fileDir)
+    # generateReportFile(dr, fileDir)
 
     endTime = datetime.now()
     print(f"Done. Ended in {endTime-startTime}")

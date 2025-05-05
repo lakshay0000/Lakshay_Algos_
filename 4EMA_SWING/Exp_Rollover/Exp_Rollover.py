@@ -92,7 +92,7 @@ class algoLogic(optOverNightAlgoLogic):
         MidFlag= False
 
 
-        Currentexpiry = getExpiryData(startEpoch, baseSym)['CurrentExpiry']
+        Currentexpiry = getExpiryData(startEpoch, baseSym)['MonthlyExpiry']
         expiryDatetime = datetime.strptime(Currentexpiry, "%d%b%y").replace(hour=15, minute=20)
         expiryEpoch= expiryDatetime.timestamp()
         lotSize = int(getExpiryData(self.timeData, baseSym)["LotSize"])
@@ -146,7 +146,7 @@ class algoLogic(optOverNightAlgoLogic):
                     self.strategyLogger.info(f"{self.humanTime}\t%K_high: {df_15min.at[last15MinIndexTimeData[1], '%K']}\tclose: {df_15min.at[last15MinIndexTimeData[1], 'c']}")
 
             if self.humanTime.date() >= (expiryDatetime - timedelta(days=1)).date():
-                Currentexpiry = getExpiryData(self.timeData, baseSym)['NextExpiry']
+                Currentexpiry = getExpiryData(self.timeData+(86400*2), baseSym)['MonthlyExpiry']
                 expiryDatetime = datetime.strptime(Currentexpiry, "%d%b%y").replace(hour=15, minute=20)
                 expiryEpoch= expiryDatetime.timestamp()
             
@@ -209,9 +209,38 @@ class algoLogic(optOverNightAlgoLogic):
                             list1_high = max(list1)
                             ReEntryAllow = True
 
+                    elif row["CurrentPrice"] <= row["Target"]:
+                        exitType = "TargetHit"
+                        self.exitOrder(index, exitType)
+                        putSym = self.getPutSym(
+                            self.timeData, baseSym, df.at[lastIndexTimeData[1], "c"],expiry= Currentexpiry)
+
+                        try:
+                            data = self.fetchAndCacheFnoHistData(
+                                putSym, lastIndexTimeData[1])
+                        except Exception as e:
+                            self.strategyLogger.info(e)
+
+                        target = 0.3 * data["c"]
+
+                        self.entryOrder(data["c"], putSym, lotSize, "SELL", {"Expiry": expiryEpoch, "IndexPrice":indexprice, "Target":target},)
+
+
                     elif self.timeData >= row["Expiry"]:
                         exitType = "Time Up"
                         self.exitOrder(index, exitType)
+                        putSym = self.getPutSym(
+                            self.timeData, baseSym, df.at[lastIndexTimeData[1], "c"],expiry= Currentexpiry)
+
+                        try:
+                            data = self.fetchAndCacheFnoHistData(
+                                putSym, lastIndexTimeData[1])
+                        except Exception as e:
+                            self.strategyLogger.info(e)
+
+                        target = 0.3 * data["c"]
+
+                        self.entryOrder(data["c"], putSym, lotSize, "SELL", {"Expiry": expiryEpoch, "IndexPrice":indexprice, "Target":target},)
     
 
             # tradecount = self.openPnl['Symbol'].str[-2:].value_counts()
@@ -234,8 +263,9 @@ class algoLogic(optOverNightAlgoLogic):
                             self.strategyLogger.info(e)
 
                         indexprice = df_15min.at[last15MinIndexTimeData[1], "c"]
+                        target = 0.3 * data["c"]
 
-                        self.entryOrder(data["c"], putSym, lotSize, "SELL", {"Expiry": expiryEpoch, "IndexPrice":indexprice},)
+                        self.entryOrder(data["c"], putSym, lotSize, "SELL", {"Expiry": expiryEpoch, "IndexPrice":indexprice, "Target":target},)
                         PutEntryAllow = False  
                         maxlist = maxlist[-2:]
 
@@ -257,8 +287,9 @@ class algoLogic(optOverNightAlgoLogic):
                             self.strategyLogger.info(e)
 
                         indexprice = df_15min.at[last15MinIndexTimeData[1], "c"]
+                        target = 0.3 * data["c"]
 
-                        self.entryOrder(data["c"], putSym, lotSize, "SELL", {"Expiry": expiryEpoch, "IndexPrice":indexprice},)
+                        self.entryOrder(data["c"], putSym, lotSize, "SELL", {"Expiry": expiryEpoch, "IndexPrice":indexprice, "Target":target},)
                         ReEntryAllow = False  
             
             if ((timeData-900) in df_15min.index):

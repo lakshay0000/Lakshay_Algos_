@@ -18,4 +18,4 @@ pm2 log 22
 pm2 stop 22
 
 # Apna Dabba
-algo mock 1
+algo mock 4
