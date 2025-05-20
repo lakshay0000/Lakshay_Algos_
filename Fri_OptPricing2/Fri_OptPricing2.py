@@ -12,21 +12,6 @@ from backtestTools.histData import getFnoBacktestData
 
 # Define a class algoLogic that inherits from optOverNightAlgoLogic
 class algoLogic(optOverNightAlgoLogic):
-
-        # Define a method to get current expiry epoch
-    def getCurrentExpiryEpoch(self, date, baseSym):
-        # Fetch expiry data for current and next expiry
-        expiryData = getExpiryData(date, baseSym)
-
-        # Select appropriate expiry based on the current date
-        expiry = expiryData["CurrentExpiry"]
-
-        # Set expiry time to 15:20 and convert to epoch
-        expiryDatetime = datetime.strptime(expiry, "%d%b%y")
-        expiryDatetime = expiryDatetime.replace(hour=15, minute=20)
-        expiryEpoch = expiryDatetime.timestamp()
-
-        return expiryEpoch
     
     def OptChain(self, date, symbol, IndexPrice):
         prmtb=[]
@@ -100,9 +85,10 @@ class algoLogic(optOverNightAlgoLogic):
 
         lastIndexTimeData = [0, 0]
         flag1=0
-        expiryEpoch = self.getCurrentExpiryEpoch(startEpoch, baseSym)
-        expiry= datetime.fromtimestamp(expiryEpoch)
-        lotSize = int(getExpiryData(startEpoch, baseSym)["LotSize"])
+        Currentexpiry = getExpiryData(startEpoch, baseSym)['MonthlyExpiry']
+        expiryDatetime = datetime.strptime(Currentexpiry, "%d%b%y").replace(hour=15, minute=20)
+        expiryEpoch= expiryDatetime.timestamp()
+        lotSize = int(getExpiryData(self.timeData, baseSym)["LotSize"])
         StraddelStop=0
         pnnl = []
         callpos=0
@@ -141,9 +127,10 @@ class algoLogic(optOverNightAlgoLogic):
             # Calculate and update PnL
             self.pnlCalculator()
 
-            if self.humanTime.date() > expiry.date() :
-                expiryEpoch = self.getCurrentExpiryEpoch(self.timeData, baseSym)
-                expiry= datetime.fromtimestamp(expiryEpoch)
+            if self.humanTime.date() > expiryDatetime.date() :
+                Currentexpiry = getExpiryData(self.timeData, baseSym)['MonthlyExpiry']
+                expiryDatetime = datetime.strptime(Currentexpiry, "%d%b%y").replace(hour=15, minute=20)
+                expiryEpoch= expiryDatetime.timestamp()
 
             if lastIndexTimeData[1] in df.index:
                 if (self.timeData >= expiryEpoch) and (flag1==0):
@@ -166,14 +153,14 @@ class algoLogic(optOverNightAlgoLogic):
 
 
             if (lastIndexTimeData[1] in df.index) and (flag1==1) and (self.humanTime.time()== time(9, 30)):
-                Atmcallsym1 = self.getCallSym(self.timeData, baseSym, df.at[lastIndexTimeData[1], "c"], otmFactor=0)
+                Atmcallsym1 = self.getCallSym(self.timeData, baseSym, df.at[lastIndexTimeData[1], "c"],expiry= Currentexpiry, otmFactor=0)
                 try:
                     data = self.fetchAndCacheFnoHistData(
                         Atmcallsym1, lastIndexTimeData[1])
                 except Exception as e:
                     self.strategyLogger.info(e)
 
-                AtmputSym1 = self.getPutSym(self.timeData, baseSym, df.at[lastIndexTimeData[1], "c"], otmFactor=0)
+                AtmputSym1 = self.getPutSym(self.timeData, baseSym, df.at[lastIndexTimeData[1], "c"],expiry= Currentexpiry, otmFactor=0)
                 try:
                     data1 = self.fetchAndCacheFnoHistData(
                         AtmputSym1, lastIndexTimeData[1])
@@ -262,7 +249,7 @@ class algoLogic(optOverNightAlgoLogic):
                     self.strategyLogger.info(f"otmfactor:{otmfactor}")
                     self.strategyLogger.info(f"prmtb:{prmtb}")
 
-                    callSym = self.getCallSym(self.timeData, baseSym, df.at[lastIndexTimeData[1], "c"], otmFactor=otmfactor)
+                    callSym = self.getCallSym(self.timeData, baseSym, df.at[lastIndexTimeData[1], "c"],expiry= Currentexpiry, otmFactor=otmfactor)
                     callstrike= callSym[len(callSym) - 7:len(callSym) - 2]
                     HedgeC =float(callstrike)+hedgetrade
                     try:
@@ -274,7 +261,7 @@ class algoLogic(optOverNightAlgoLogic):
 
                     # entry order for hedge  
                     Hotmfactor=self.Otmfactor(stike,HedgeC)
-                    callSym = self.getCallSym(self.timeData, baseSym, df.at[lastIndexTimeData[1], "c"], otmFactor=Hotmfactor)
+                    callSym = self.getCallSym(self.timeData, baseSym, df.at[lastIndexTimeData[1], "c"],expiry= Currentexpiry, otmFactor=Hotmfactor)
                     self.strategyLogger.info(f"otmforhedge:{Hotmfactor}")
 
                     try:
@@ -291,7 +278,7 @@ class algoLogic(optOverNightAlgoLogic):
                     prmtb,stike = self.OptChain(lastIndexTimeData[1],"PE",df.at[lastIndexTimeData[1], "c"])
                     otmfactor=self.Otmfactor(prmtb,otmtrade)
 
-                    putSym = self.getPutSym(self.timeData, baseSym, df.at[lastIndexTimeData[1], "c"], otmFactor=otmfactor)
+                    putSym = self.getPutSym(self.timeData, baseSym, df.at[lastIndexTimeData[1], "c"],expiry= Currentexpiry, otmFactor=otmfactor)
                     putstrike= putSym[len(putSym) - 7:len(putSym) - 2]
                     HedgeP =float(putstrike) - hedgetrade
                     try:
@@ -304,7 +291,7 @@ class algoLogic(optOverNightAlgoLogic):
 
                     # entry order for hedge
                     Hotmfactor=self.Otmfactor(stike,HedgeP)
-                    putSym = self.getPutSym(self.timeData, baseSym, df.at[lastIndexTimeData[1], "c"], otmFactor=Hotmfactor)
+                    putSym = self.getPutSym(self.timeData, baseSym, df.at[lastIndexTimeData[1], "c"],expiry= Currentexpiry, otmFactor=Hotmfactor)
                     self.strategyLogger.info(f"otmforhedge:{Hotmfactor}")
 
                     try:
@@ -329,7 +316,7 @@ class algoLogic(optOverNightAlgoLogic):
                         otmfactorH = otmfactorH+OTM1 
                         self.strategyLogger.info(f"OTM1: {OTM1}\totmfactorH: {otmfactorH}")
 
-                    callSym = self.getCallSym(self.timeData, baseSym, df.at[lastIndexTimeData[1], "c"], otmFactor=otmfactorH)
+                    callSym = self.getCallSym(self.timeData, baseSym, df.at[lastIndexTimeData[1], "c"],expiry= Currentexpiry, otmFactor=otmfactorH)
                     callstrike= callSym[len(callSym) - 7:len(callSym) - 2]
                     HedgeC =float(callstrike)+hedgetrade
                     self.strategyLogger.info(f"callSym:{callSym}")
@@ -344,7 +331,7 @@ class algoLogic(optOverNightAlgoLogic):
                     
                     # hedge for the trade  
                     HotmfactorC= self.Otmfactor(stike,HedgeC)
-                    callSym = self.getCallSym(self.timeData, baseSym, df.at[lastIndexTimeData[1], "c"], otmFactor=HotmfactorC)
+                    callSym = self.getCallSym(self.timeData, baseSym, df.at[lastIndexTimeData[1], "c"],expiry= Currentexpiry, otmFactor=HotmfactorC)
                     self.strategyLogger.info(f"otmforhedge:{HotmfactorC}")
 
                     try:
@@ -369,7 +356,7 @@ class algoLogic(optOverNightAlgoLogic):
                         otmfactorH2 = otmfactorH2+OTM1 
                         self.strategyLogger.info(f"OTM1: {OTM1}\totmfactorH: {otmfactorH2}")
 
-                    putSym = self.getPutSym(self.timeData, baseSym, df.at[lastIndexTimeData[1], "c"], otmFactor=otmfactorH2)
+                    putSym = self.getPutSym(self.timeData, baseSym, df.at[lastIndexTimeData[1], "c"],expiry= Currentexpiry, otmFactor=otmfactorH2)
                     putstrike= putSym[len(putSym) - 7:len(putSym) - 2]
                     HedgeP =float(putstrike) - hedgetrade
                     self.strategyLogger.info(f"putSym:{putSym}")
@@ -384,7 +371,7 @@ class algoLogic(optOverNightAlgoLogic):
                     
                     # hedge for the trade 
                     HotmfactorP= self.Otmfactor(stike,HedgeP) 
-                    putSym = self.getPutSym(self.timeData, baseSym, df.at[lastIndexTimeData[1], "c"], otmFactor=HotmfactorP)
+                    putSym = self.getPutSym(self.timeData, baseSym, df.at[lastIndexTimeData[1], "c"],expiry= Currentexpiry, otmFactor=HotmfactorP)
                     self.strategyLogger.info(f"otmforhedge:{HotmfactorP}")
 
                     try:
@@ -414,8 +401,8 @@ if __name__ == "__main__":
     version = "v1"
 
     # Define Start date and End date
-    startDate = datetime(2020, 1, 1, 9, 15)
-    endDate = datetime(2024, 12, 31, 15, 30)
+    startDate = datetime(2021, 1, 1, 9, 15)
+    endDate = datetime(2025, 12, 31, 15, 30)
 
     # Create algoLogic object
     algo = algoLogic(devName, strategyName, version)

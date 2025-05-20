@@ -92,7 +92,7 @@ class algoLogic(optOverNightAlgoLogic):
         MidFlag= False
 
 
-        Currentexpiry = getExpiryData(startEpoch, baseSym)['MonthlyExpiry']
+        Currentexpiry = getExpiryData(startEpoch, baseSym)['CurrentExpiry']
         expiryDatetime = datetime.strptime(Currentexpiry, "%d%b%y").replace(hour=15, minute=20)
         expiryEpoch= expiryDatetime.timestamp()
         lotSize = int(getExpiryData(self.timeData, baseSym)["LotSize"])
@@ -147,7 +147,7 @@ class algoLogic(optOverNightAlgoLogic):
                     self.strategyLogger.info(f"{self.humanTime}\t%K_Low: {df_15min.at[last15MinIndexTimeData[1], '%K']}\tclose: {df_15min.at[last15MinIndexTimeData[1], 'c']}")
 
             if self.humanTime.date() >= (expiryDatetime - timedelta(days=1)).date():
-                Currentexpiry = getExpiryData(self.timeData+(86400*2), baseSym)['MonthlyExpiry']
+                Currentexpiry = getExpiryData(self.timeData, baseSym)['NextExpiry']
                 expiryDatetime = datetime.strptime(Currentexpiry, "%d%b%y").replace(hour=15, minute=20)
                 expiryEpoch= expiryDatetime.timestamp()
 
@@ -196,7 +196,7 @@ class algoLogic(optOverNightAlgoLogic):
                     symstrike = float(row['Symbol'][-7:-2])
                     
                     if row["CurrentPrice"] >= row["Stoploss"]:
-                        exitType = "MarketStoploss"
+                        exitType = "100%Stoploss"
                         self.exitOrder(index, exitType)
                         list1_low = min(list1)
                         ReEntryAllow = True
