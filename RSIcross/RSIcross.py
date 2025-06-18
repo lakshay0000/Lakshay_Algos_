@@ -186,7 +186,7 @@ class algoLogic(optOverNightAlgoLogic):
                             data = self.fetchAndCacheFnoHistData(
                                 putSym, lastIndexTimeData[1])
                         except Exception as e:
-                            self.strategyLogger.info(e)
+                            self.strategyLogger.info(e)  
 
                         target = 0.3 * data["c"]
                         stoploss = 1.3 * data["c"]
