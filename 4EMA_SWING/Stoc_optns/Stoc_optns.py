@@ -118,7 +118,7 @@ class algoLogic(optOverNightAlgoLogic):
         MidFlag= False
         Midlist_low=[]
         MidFlag_low= False
-        prev_ATR = None  
+        prev_ATR = None
 
 
         Currentexpiry = getExpiryData(startEpoch, baseSym, conn=conn)['MonthlyExpiry']
@@ -191,8 +191,7 @@ class algoLogic(optOverNightAlgoLogic):
                 Currentexpiry = getExpiryData(self.timeData+(86400*2), baseSym, conn=conn)['MonthlyExpiry']
                 expiryDatetime = datetime.strptime(Currentexpiry, "%d%b%y").replace(hour=15, minute=20)
                 expiryEpoch= expiryDatetime.timestamp()
-                StrikeDist = int(getExpiryData(startEpoch, baseSym, conn=conn)["StrikeDist"])
-            
+                StrikeDist = int(getExpiryData(startEpoch, baseSym, conn=conn)["StrikeDist"])            
 
             
             if ((timeData-900) in df_15min.index):
@@ -374,7 +373,7 @@ class algoLogic(optOverNightAlgoLogic):
 
                             try:
                                 data = getEquityHistData(
-                                    callSym, lastIndexTimeData[1], conn=conn)  
+                                    callSym, lastIndexTimeData[1], conn=conn)
                             except Exception as e:
                                 self.strategyLogger.info(e)
 
@@ -510,14 +509,14 @@ if __name__ == "__main__":
 
     # Define Start date and End date
     startDate = datetime(2024, 1, 2, 9, 15)
-    endDate = datetime(2024, 12, 30, 15, 30) 
+    endDate = datetime(2024, 12, 31, 15, 30)
 
     # Create algoLogic object
     algo = algoLogic(devName, strategyName, version)
 
     # Define Index Name
-    baseSym = "BHARTIARTL"
-    indexName = "BHARTIARTL"
+    baseSym = "AUBANK"
+    indexName = "AUBANK"
 
     # Execute the algorithm
     closedPnl, fileDir = algo.run(startDate, endDate, baseSym, indexName)
