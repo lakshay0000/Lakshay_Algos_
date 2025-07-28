@@ -1,12 +1,12 @@
 import numpy as np
 import talib as ta
-import pandas_ta as taa
 import re
+import pandas_ta as taa
 from backtestTools.expiry import getExpiryData
 from datetime import datetime, time, timedelta
-from backtestTools.algoLogic import optOverNightAlgoLogic 
+from backtestTools.algoLogic import optOverNightAlgoLogic
 from backtestTools.util import calculateDailyReport, limitCapital, generateReportFile
-from backtestTools.histData import getEquityBacktestData, getEquityHistData, connectToMongo
+from backtestTools.histData import getFnoBacktestData
 
 # sys.path.insert(1, '/root/backtestTools')
 
@@ -22,11 +22,8 @@ class algoLogic(optOverNightAlgoLogic):
         else:
             return None
 
-
     # Define a method to execute the algorithm
     def run(self, startDate, endDate, baseSym, indexSym):
-        
-        conn = connectToMongo()
 
         # Add necessary columns to the DataFrame
         col = ["Target", "Stoploss", "Expiry"]
@@ -38,32 +35,29 @@ class algoLogic(optOverNightAlgoLogic):
 
         try:
             # Fetch historical data for backtesting
-            df = getEquityBacktestData(indexSym, startEpoch, endEpoch, "1Min", conn=conn)
+            df = getFnoBacktestData(indexSym, startEpoch, endEpoch, "1Min")
         except Exception as e:
             # Log an exception if data retrieval fails
             self.strategyLogger.info(
-                f"Data not found for {baseSym} in range {startDate} to {endDate}") 
+                f"Data not found for {baseSym} in range {startDate} to {endDate}")
             raise Exception(e)
 
         # Drop rows with missing values
         df.dropna(inplace=True)
 
 
+
         df.to_csv(
             f"{self.fileDir['backtestResultsCandleData']}{indexName}_1Min.csv")
 
 
-        # Strategy Parameters
-
+        # Strategy Parameters       
         lastIndexTimeData = [0, 0]
 
-
-        Currentexpiry = getExpiryData(startEpoch, baseSym, conn=conn)['MonthlyExpiry']
+        Currentexpiry = getExpiryData(startEpoch, baseSym)['MonthlyExpiry']
         expiryDatetime = datetime.strptime(Currentexpiry, "%d%b%y").replace(hour=15, minute=20)
         expiryEpoch= expiryDatetime.timestamp()
-        StrikeDist = 1
-        # lotSize = int(getExpiryData(startEpoch, baseSym)["LotSize"])
-
+        # lotSize = int(getExpiryData(self.timeData, baseSym)["LotSize"])
 
         # Loop through each timestamp in the DataFrame index
         for timeData in df.index: 
@@ -72,6 +66,9 @@ class algoLogic(optOverNightAlgoLogic):
             self.humanTime = datetime.fromtimestamp(timeData)
             print(self.humanTime)
 
+            # Skip the dates 2nd March 2024 and 18th May 2024
+            if self.humanTime.date() in [datetime(2024, 3, 2).date(), datetime(2024, 5, 18).date()]:
+                continue
 
             # Skip time periods outside trading hours
             if (self.humanTime.time() < time(9, 16)) | (self.humanTime.time() > time(15, 30)):
@@ -85,44 +82,36 @@ class algoLogic(optOverNightAlgoLogic):
             if (self.humanTime.time() < time(9, 16)) | (self.humanTime.time() > time(15, 25)):
                 continue
 
-            #  # Log relevant information
-            # if lastIndexTimeData[1] in df.index:
-            #     self.strategyLogger.info(f"Datetime: {self.humanTime}\tClose: {df.at[lastIndexTimeData[1],'c']}")
-
-
+            # # Log relevant information
+            # if (timeData-300) in df_1h.index:
+            #     self.strategyLogger.info(
+            #         f"Datetime: {self.humanTime}\tClose: {df.at[lastIndexTimeData[1],'c']}\trsi60: {df_1h.at[last5MinIndexTimeData[1],'rsiCross60']}\trsi50: {df_1h.at[last5MinIndexTimeData[1],'rsiCross50']}\trsi40: {df_1h.at[last5MinIndexTimeData[1],'rsiCross40']}")
 
             # Update current price for open positions
             # if not self.openPnl.empty:
             #     for index, row in self.openPnl.iterrows():
             #         try:
-            #             data = getEquityHistData(
-            #                 row["Symbol"], lastIndexTimeData[1], conn=conn)
+            #             data = self.fetchAndCacheFnoHistData(
+            #                 row["Symbol"], lastIndexTimeData[1])
             #             self.openPnl.at[index, "CurrentPrice"] = data["c"]
             #         except Exception as e:
-            #             self.strategyLogger.info("NO DATA FOUND FOR " + row["Symbol"])
+            #             self.strategyLogger.info(e)
 
             # Calculate and update PnL
             self.pnlCalculator()
-            
 
             if self.humanTime.date() >= (expiryDatetime).date():
-                Currentexpiry = getExpiryData(self.timeData+(86400), baseSym, conn=conn)['MonthlyExpiry']
+                Currentexpiry = getExpiryData(self.timeData+(86400), baseSym)['MonthlyExpiry']
                 expiryDatetime = datetime.strptime(Currentexpiry, "%d%b%y").replace(hour=15, minute=20)
                 expiryEpoch= expiryDatetime.timestamp()
-                # StrikeDist = int(getExpiryData(startEpoch, baseSym, conn=conn)["StrikeDist"])            
-            
-            if lastIndexTimeData[1] in df.index:
-                UnderlyingPrice = df.at[lastIndexTimeData[1], "c"]
-
-
 
             # Check for exit conditions and execute exit orders
             if not self.openPnl.empty:
                 for index, row in self.openPnl.iterrows():
 
                     Symbol = row["Symbol"]   
-                    symSide = Symbol[len(Symbol) - 2:]
-                    
+                    symSide = Symbol[len(Symbol) - 2:]   
+
                     if self.timeData >= row["Expiry"]:
                         strike = self.extract_strike(Symbol)
                         UnderlyingPrice = df.at[lastIndexTimeData[1], "c"]
@@ -144,47 +133,38 @@ class algoLogic(optOverNightAlgoLogic):
                             exitType = f"Time Up {UnderlyingPrice}"
                             self.exitOrder(index, exitType, exitPrice)
 
-
-            # tradecount = self.openPnl['Symbol'].str[-2:].value_counts()
-            # callCounter= tradecount.get('CE',0)
-            # putCounter= tradecount.get('PE',0)
-
+    
             # Check for entry signals and execute orders
             if ((timeData-60) in df.index) and self.openPnl.empty and self.humanTime.time() == time(15, 20):
 
                 UnderlyingPrice = df.at[lastIndexTimeData[1], "c"]
-                lotSize=  round((10000000/ UnderlyingPrice)* 1.3) # Adjusted lot size calculation
+                lotSize=  round((10000000/ UnderlyingPrice))
 
                 self.strategyLogger.info(f"{self.humanTime}\t{self.timeData}\t{baseSym}\tclose:{df.at[lastIndexTimeData[1], 'c']}\texpiry: {Currentexpiry}")
-                putSym = self.getPutSym(
-                    self.timeData, baseSym, df.at[lastIndexTimeData[1], "c"],expiry= Currentexpiry,strikeDist= StrikeDist, conn=conn)
+                putSym = self.getPutSym(self.timeData, baseSym, df.at[lastIndexTimeData[1], "c"],expiry= Currentexpiry)
                 self.strategyLogger.info(f"{self.humanTime}\tputSym: {putSym}")
 
                 try:
-                    data = getEquityHistData(
-                        putSym, lastIndexTimeData[1], conn=conn)
-                    prm= data["c"]
+                    data = self.fetchAndCacheFnoHistData(
+                        putSym, lastIndexTimeData[1])
                 except Exception as e:
                     self.strategyLogger.info(e)
-                    prm = 0.1
 
-                self.entryOrder(prm, putSym, lotSize, "BUY", {"Expiry": expiryEpoch},)
 
-                # call sell
-                callSym = self.getCallSym(
-                    self.timeData, baseSym, df.at[lastIndexTimeData[1], "c"],expiry= Currentexpiry,strikeDist= StrikeDist, conn=conn)
+                self.entryOrder(data["c"], putSym, lotSize, "SELL", {"Expiry": expiryEpoch,})
+                    
+                # call buy
+                callSym = self.getCallSym(self.timeData, baseSym, df.at[lastIndexTimeData[1], "c"],expiry= Currentexpiry)
                 self.strategyLogger.info(f"{self.humanTime}\tcallSym: {callSym}")
-
                 try:
-                    data = getEquityHistData(
-                        callSym, lastIndexTimeData[1], conn=conn)
-                    prm= data["c"]
+                    data = self.fetchAndCacheFnoHistData(
+                        callSym, lastIndexTimeData[1])
                 except Exception as e:
                     self.strategyLogger.info(e)
-                    prm = 0.1
 
-                self.entryOrder(prm, callSym, lotSize, "SELL", {"Expiry": expiryEpoch},)
 
+                self.entryOrder(data["c"], callSym, lotSize, "BUY", {"Expiry": expiryEpoch,})
+                
 
 
         # Calculate final PnL and combine CSVs
@@ -210,8 +190,8 @@ if __name__ == "__main__":
     algo = algoLogic(devName, strategyName, version)
 
     # Define Index Name
-    baseSym = "FEDERALBNK"
-    indexName = "FEDERALBNK"
+    baseSym = "BANKNIFTY"
+    indexName = "NIFTY BANK"
 
     # Execute the algorithm
     closedPnl, fileDir = algo.run(startDate, endDate, baseSym, indexName)
