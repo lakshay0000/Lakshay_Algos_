@@ -165,7 +165,7 @@ class algoLogic(optOverNightAlgoLogic):
 
             if prev_day in df_1d.index:
                 prev_ATR = (df_1d.at[prev_day, 'ATR'])/4
-  
+
 
 
             # Update current price for open positions
@@ -176,7 +176,7 @@ class algoLogic(optOverNightAlgoLogic):
                             row["Symbol"], lastIndexTimeData[1], conn=conn)
                         self.openPnl.at[index, "CurrentPrice"] = data["c"]
                     except Exception as e:
-                        self.strategyLogger.info(f"{self.humanTime} NO DATA FOUND FOR " + row["Symbol"])
+                        self.strategyLogger.info("NO DATA FOUND FOR " + row["Symbol"])
 
             # Calculate and update PnL
             self.pnlCalculator()
@@ -313,7 +313,7 @@ class algoLogic(optOverNightAlgoLogic):
                             except Exception as e:
                                 self.strategyLogger.info(e)
 
-                            target = 2 * data["c"]
+                            target = 3 * data["c"]
 
                             self.entryOrder(data["c"], putSym, lotSize, "BUY", {"Expiry": expiryEpoch, "IndexPrice":indexprice, "Target":target},)
 
@@ -329,7 +329,7 @@ class algoLogic(optOverNightAlgoLogic):
                             except Exception as e:
                                 self.strategyLogger.info(e)
 
-                            target = 2 * data["c"]
+                            target = 3 * data["c"]
 
                             self.entryOrder(data["c"], putSym, lotSize, "BUY", {"Expiry": expiryEpoch, "IndexPrice":indexprice, "Target":target},)
 
@@ -362,7 +362,7 @@ class algoLogic(optOverNightAlgoLogic):
                             except Exception as e:
                                 self.strategyLogger.info(e)
 
-                            target = 2 * data["c"]
+                            target = 3 * data["c"]
 
                             self.entryOrder(data["c"], callSym, lotSize, "BUY", {"Expiry": expiryEpoch, "IndexPrice":indexprice, "Target":target},)
 
@@ -378,7 +378,7 @@ class algoLogic(optOverNightAlgoLogic):
                             except Exception as e:
                                 self.strategyLogger.info(e)
 
-                            target = 2 * data["c"]
+                            target = 3 * data["c"]
 
                             self.entryOrder(data["c"], callSym, lotSize, "BUY", {"Expiry": expiryEpoch, "IndexPrice":indexprice, "Target":target},)
 
@@ -407,7 +407,7 @@ class algoLogic(optOverNightAlgoLogic):
                             self.strategyLogger.info(e)
 
                         indexprice = df_15min.at[last15MinIndexTimeData[1], "c"]
-                        target = 2 * data["c"]
+                        target = 3 * data["c"]
 
                         self.entryOrder(data["c"], callSym, lotSize, "BUY", {"Expiry": expiryEpoch, "IndexPrice":indexprice, "Target":target},)
                         CallEntryAllow = False
@@ -428,7 +428,7 @@ class algoLogic(optOverNightAlgoLogic):
                             self.strategyLogger.info(e)
 
                         indexprice = df_15min.at[last15MinIndexTimeData[1], "c"]
-                        target = 2 * data["c"]
+                        target = 3 * data["c"]
 
                         self.entryOrder(data["c"], putSym, lotSize, "BUY", {"Expiry": expiryEpoch, "IndexPrice":indexprice, "Target":target},)
                         PutEntryAllow = False
@@ -452,7 +452,7 @@ class algoLogic(optOverNightAlgoLogic):
                             self.strategyLogger.info(e)
 
                         indexprice = df_15min.at[last15MinIndexTimeData[1], "c"]
-                        target = 2 * data["c"]
+                        target = 3 * data["c"]
 
                         self.entryOrder(data["c"], putSym, lotSize, "BUY", {"Expiry": expiryEpoch, "IndexPrice":indexprice, "Target":target},)
                         PutReEntryAllow = False  
@@ -472,7 +472,7 @@ class algoLogic(optOverNightAlgoLogic):
                             self.strategyLogger.info(e)
 
                         indexprice = df_15min.at[last15MinIndexTimeData[1], "c"]
-                        target = 2 * data["c"]
+                        target = 3 * data["c"]
 
                         self.entryOrder(data["c"], callSym, lotSize, "BUY", {"Expiry": expiryEpoch, "IndexPrice":indexprice, "Target":target},)
                         CallReEntryAllow = False  
@@ -511,8 +511,8 @@ if __name__ == "__main__":
     algo = algoLogic(devName, strategyName, version)
 
     # Define Index Name
-    baseSym = "SBIN"
-    indexName = "SBIN"
+    baseSym = "APOLLOHOSP"
+    indexName = "APOLLOHOSP"
 
     # Execute the algorithm
     closedPnl, fileDir = algo.run(startDate, endDate, baseSym, indexName)

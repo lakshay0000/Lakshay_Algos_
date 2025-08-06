@@ -201,7 +201,7 @@ class algoLogic(optOverNightAlgoLogic):
 
 
             if ((timeData-900) in df_15min.index):
-                if (df_15min.at[last15MinIndexTimeData[1], "EMA_High"] - df_15min.at[last15MinIndexTimeData[1], "EMA_Low"])<50:
+                if len(maxlist)>=2 and len(lowlist)>=2 and (df_15min.at[last15MinIndexTimeData[1], "EMA_High"] - df_15min.at[last15MinIndexTimeData[1], "EMA_Low"])<100:
                     if len(maxlist)>=2:
                         last_two_max = maxlist[-2:]
                         if Midlist:
@@ -251,7 +251,7 @@ class algoLogic(optOverNightAlgoLogic):
                     symSide = symSide[len(symSide) - 2:]      
 
                     if symSide == "PE":
-                        if UnderlyingPrice <= (row["IndexPrice"]+50):
+                        if UnderlyingPrice >= (row["IndexPrice"]+100):
                             exitType = "MarketStoploss"
                             self.exitOrder(index, exitType)
                             list1_low_V = min(list1_low)
@@ -278,7 +278,7 @@ class algoLogic(optOverNightAlgoLogic):
                             except Exception as e:
                                 self.strategyLogger.info(e)
 
-                            target = 3 * data["c"]
+                            target = 2 * data["c"]
 
                             self.entryOrder(data["c"], putSym, lotSize, "BUY", {"Expiry": expiryEpoch, "IndexPrice":indexprice, "Target":target},)
 
@@ -294,12 +294,12 @@ class algoLogic(optOverNightAlgoLogic):
                             except Exception as e:
                                 self.strategyLogger.info(e)
 
-                            target = 3 * data["c"]
+                            target = 2 * data["c"]
 
                             self.entryOrder(data["c"], putSym, lotSize, "BUY", {"Expiry": expiryEpoch, "IndexPrice":indexprice, "Target":target},)
 
                     elif symSide == "CE":
-                        if UnderlyingPrice >= (row["IndexPrice"]-50):
+                        if UnderlyingPrice <= (row["IndexPrice"]-100):
                             exitType = "MarketStoploss"
                             self.exitOrder(index, exitType)
                             list1_high_V = max(list1_high)
@@ -326,7 +326,7 @@ class algoLogic(optOverNightAlgoLogic):
                             except Exception as e:
                                 self.strategyLogger.info(e)
 
-                            target = 3 * data["c"]
+                            target = 2 * data["c"]
 
                             self.entryOrder(data["c"], callSym, lotSize, "BUY", {"Expiry": expiryEpoch, "IndexPrice":indexprice, "Target":target},)
 
@@ -342,7 +342,7 @@ class algoLogic(optOverNightAlgoLogic):
                             except Exception as e:
                                 self.strategyLogger.info(e)
 
-                            target = 3 * data["c"]
+                            target = 2 * data["c"]
 
                             self.entryOrder(data["c"], callSym, lotSize, "BUY", {"Expiry": expiryEpoch, "IndexPrice":indexprice, "Target":target},)
 
@@ -368,7 +368,7 @@ class algoLogic(optOverNightAlgoLogic):
                             self.strategyLogger.info(e)
 
                         indexprice = df_15min.at[last15MinIndexTimeData[1], "c"]
-                        target = 3 * data["c"]
+                        target = 2 * data["c"]
 
                         self.entryOrder(data["c"], callSym, lotSize, "BUY", {"Expiry": expiryEpoch, "IndexPrice":indexprice, "Target":target},)  
                         CallEntryAllow = False
@@ -387,7 +387,7 @@ class algoLogic(optOverNightAlgoLogic):
                             self.strategyLogger.info(e)
 
                         indexprice = df_15min.at[last15MinIndexTimeData[1], "c"]
-                        target = 3 * data["c"]
+                        target = 2 * data["c"]
 
                         self.entryOrder(data["c"], putSym, lotSize, "BUY", {"Expiry": expiryEpoch, "IndexPrice":indexprice, "Target":target},)
                         PutEntryAllow = False  
@@ -411,7 +411,7 @@ class algoLogic(optOverNightAlgoLogic):
                             self.strategyLogger.info(e)
 
                         indexprice = df_15min.at[last15MinIndexTimeData[1], "c"]
-                        target = 3 * data["c"]
+                        target = 2 * data["c"]
 
                         self.entryOrder(data["c"], callSym, lotSize, "BUY", {"Expiry": expiryEpoch, "IndexPrice":indexprice, "Target":target},)
                         CallReEntryAllow = False  
@@ -432,9 +432,9 @@ class algoLogic(optOverNightAlgoLogic):
                             self.strategyLogger.info(e)
 
                         indexprice = df_15min.at[last15MinIndexTimeData[1], "c"]
-                        target = 3 * data["c"]
+                        target = 2 * data["c"]
 
-                        self.entryOrder(data["c"], putSym, lotSize, "BUY", {"Expiry": expiryEpoch, "IndexPrice":indexprice, "Target":target},)
+                        self.entryOrder(data["c"], putSym, lotSize, "BUY", {"Expiry": expiryEpoch, "IndexPrice":indexprice, "Target":target},) 
                         PutReEntryAllow = False  
             
             if ((timeData-900) in df_15min.index):
@@ -465,26 +465,26 @@ if __name__ == "__main__":
 
     # Define Start date and End date
     startDate = datetime(2021, 1, 1, 9, 15)
-    endDate = datetime(2025, 3, 31, 15, 30)
+    endDate = datetime(2025, 12, 31, 15, 30)
 
     # Create algoLogic object
     algo = algoLogic(devName, strategyName, version)
 
     # Define Index Name
-    baseSym = "NIFTY"
-    indexName = "NIFTY 50"
+    baseSym = "BANKNIFTY"
+    indexName = "NIFTY BANK"
 
     # Execute the algorithm
     closedPnl, fileDir = algo.run(startDate, endDate, baseSym, indexName)
 
     print("Calculating Daily Pnl")
-    # dr = calculateDailyReport(
-    #     closedPnl, fileDir, timeFrame=timedelta(minutes=5), mtm=True
-    # )
+    dr = calculateDailyReport(
+        closedPnl, fileDir, timeFrame=timedelta(minutes=5), mtm=True
+    )
 
-    # limitCapital(closedPnl, fileDir, maxCapitalAmount=1000)
+    limitCapital(closedPnl, fileDir, maxCapitalAmount=1000)
 
-    # generateReportFile(dr, fileDir)
+    generateReportFile(dr, fileDir)
 
     endTime = datetime.now()
     print(f"Done. Ended in {endTime-startTime}")

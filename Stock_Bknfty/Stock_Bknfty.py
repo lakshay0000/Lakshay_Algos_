@@ -61,7 +61,7 @@ class algoLogic(optOverNightAlgoLogic):
         Currentexpiry = getExpiryData(startEpoch, baseSym, conn=conn)['MonthlyExpiry']
         expiryDatetime = datetime.strptime(Currentexpiry, "%d%b%y").replace(hour=15, minute=20)
         expiryEpoch= expiryDatetime.timestamp()
-        StrikeDist = 1
+        StrikeDist = int(getExpiryData(startEpoch, baseSym, conn=conn)["StrikeDist"])   
         # lotSize = int(getExpiryData(startEpoch, baseSym)["LotSize"])
 
 
@@ -109,7 +109,7 @@ class algoLogic(optOverNightAlgoLogic):
                 Currentexpiry = getExpiryData(self.timeData+(86400), baseSym, conn=conn)['MonthlyExpiry']
                 expiryDatetime = datetime.strptime(Currentexpiry, "%d%b%y").replace(hour=15, minute=20)
                 expiryEpoch= expiryDatetime.timestamp()
-                # StrikeDist = int(getExpiryData(startEpoch, baseSym, conn=conn)["StrikeDist"])            
+                StrikeDist = int(getExpiryData(self.timeData, baseSym, conn=conn)["StrikeDist"])            
             
             if lastIndexTimeData[1] in df.index:
                 UnderlyingPrice = df.at[lastIndexTimeData[1], "c"]
@@ -153,7 +153,7 @@ class algoLogic(optOverNightAlgoLogic):
             if ((timeData-60) in df.index) and self.openPnl.empty and self.humanTime.time() == time(15, 20):
 
                 UnderlyingPrice = df.at[lastIndexTimeData[1], "c"]
-                lotSize=  round((10000000/ UnderlyingPrice)* 1.3) # Adjusted lot size calculation
+                lotSize=  round((10000000/ UnderlyingPrice)* 1.16) # Adjusted lot size calculation
 
                 self.strategyLogger.info(f"{self.humanTime}\t{self.timeData}\t{baseSym}\tclose:{df.at[lastIndexTimeData[1], 'c']}\texpiry: {Currentexpiry}")
                 putSym = self.getPutSym(
@@ -210,20 +210,20 @@ if __name__ == "__main__":
     algo = algoLogic(devName, strategyName, version)
 
     # Define Index Name
-    baseSym = "FEDERALBNK"
-    indexName = "FEDERALBNK"
+    baseSym = "IDFCFIRSTB"
+    indexName = "IDFCFIRSTB"
 
     # Execute the algorithm
     closedPnl, fileDir = algo.run(startDate, endDate, baseSym, indexName)
 
     print("Calculating Daily Pnl")
-    # dr = calculateDailyReport(
-    #     closedPnl, fileDir, timeFrame=timedelta(minutes=5), mtm=True
-    # )
+    dr = calculateDailyReport(
+        closedPnl, fileDir, timeFrame=timedelta(minutes=5), mtm=True
+    )
 
-    # limitCapital(closedPnl, fileDir, maxCapitalAmount=1000)
+    limitCapital(closedPnl, fileDir, maxCapitalAmount=1000)
 
-    # generateReportFile(dr, fileDir)
+    generateReportFile(dr, fileDir)
 
     endTime = datetime.now()
     print(f"Done. Ended in {endTime-startTime}")
