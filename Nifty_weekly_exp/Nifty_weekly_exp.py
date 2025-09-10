@@ -46,7 +46,7 @@ class algoLogic(optOverNightAlgoLogic):
         minIndex = np.argmin(minlist)
         prm = Strad_list[minIndex]
 
-        return prm 
+        return prm
     
     def OptChain(self, date, symbol, IndexPrice, baseSym):
         prmtb=[]
@@ -143,8 +143,8 @@ class algoLogic(optOverNightAlgoLogic):
             print(self.humanTime)
 
             # Skip the dates 2nd March 2024 and 18th May 2024
-            if self.humanTime.date() == datetime(2025, 4, 7).date() or self.humanTime.date() == datetime(2025, 6, 16).date():
-                continue
+            # if self.humanTime.date() == datetime(2024, 4, 26).date() or self.humanTime.date() == datetime(2025, 6, 17).date():
+            #     continue
 
             # Skip time periods outside trading hours
             if (self.humanTime.time() < time(9, 16)) | (self.humanTime.time() > time(15, 30)):
@@ -187,13 +187,13 @@ class algoLogic(optOverNightAlgoLogic):
                 # EntryAllowed = True
 
 
-            # Check if the current time is past the expiry time
-            if prev_day is None:
-                prev_day = expiryEpoch - 86400
-                if timeData in df.index:
-                    #check if previoud day exists in 1d data
-                    while prev_day not in df.index:
-                        prev_day = prev_day - 86400                
+            # # Check if the current time is past the expiry time
+            # if prev_day is None:
+            #     prev_day = expiryEpoch - 86400
+            #     if timeData in df.index:
+            #         #check if previoud day exists in 1d data
+            #         while prev_day not in df.index:
+            #             prev_day = prev_day - 86400                
             
 
             # if lastIndexTimeData[1] in df.index:
@@ -222,18 +222,17 @@ class algoLogic(optOverNightAlgoLogic):
                 #         i = 3
                 #         i_CanChange = False
 
-
             # First, check all positions for stoploss
             if not self.openPnl.empty and (Stranggle_Exit == False):
                 for index, row in self.openPnl.iterrows():
                     if row["CurrentPrice"] >= row["Stoploss"]:
                         Stranggle_Exit = True
                         if i_CanChange:
-                            if i < 5:
+                            if i < 6:
                                 i += 1
                                 self.strategyLogger.info(f"i value increased to {i}")
                             else:
-                                i = 5
+                                i = 6
                                 self.strategyLogger.info(f"i value remains {i}")
                             i_CanChange = False
 
@@ -246,7 +245,7 @@ class algoLogic(optOverNightAlgoLogic):
                     symSide = symSide[len(symSide) - 2:]      
 
 
-                    if Current_strangle_value >= 1.3 * strangle:
+                    if Current_strangle_value >= 1.5 * strangle:
                         exitType = "Combined Loss Exit"
                         # pnl = row["Pnl"] 
                         # pnnl.append(pnl)
@@ -263,18 +262,18 @@ class algoLogic(optOverNightAlgoLogic):
                             i_CanChange = False
 
 
-                    elif Current_strangle_value <= 0.7 * strangle:
+                    elif Current_strangle_value <= 0.5 * strangle:
                         exitType = "Combined Profit Exit"
                         # pnl = row["Pnl"] 
                         # pnnl.append(pnl)
                         self.exitOrder(index, exitType)
                         self.strategyLogger.info(f"Current_strangle_value:{Current_strangle_value}")
                         if i_CanChange:
-                            if i < 5:
+                            if i < 6:
                                 i += 1
                                 self.strategyLogger.info(f"i value increased to {i}")
                             else:
-                                i= 5
+                                i= 6
                                 self.strategyLogger.info(f"i value remanins {i}")
 
                             i_CanChange = False
@@ -302,7 +301,7 @@ class algoLogic(optOverNightAlgoLogic):
             # Check for entry signals and execute orders
             if ((timeData-60) in df.index) and self.openPnl.empty:
 
-                if self.humanTime.date() == datetime.fromtimestamp(prev_day).date() and self.humanTime.time() < time(15, 20):
+                if self.humanTime.date() == expiryDatetime.date() and self.humanTime.time() < time(15, 20):
                     straddle_value = self.straddle(lastIndexTimeData[1], df.at[lastIndexTimeData[1], "c"], baseSym)
                     if straddle_value is None:
                         self.strategyLogger.info("Straddle value is None, skipping entry.")
@@ -330,7 +329,7 @@ class algoLogic(optOverNightAlgoLogic):
                     dataCE = data["c"]
                     stoploss = 2 * data["c"]
 
-                    self.entryOrder(data["c"], callSym, lotSize*i, "SELL", {"Expiry": expiryEpoch, "Stoploss": stoploss},)
+                    self.entryOrder(data["c"], callSym, lotSize, "SELL", {"Expiry": expiryEpoch, "Stoploss": stoploss},)
                     
                     prmtb = self.OptChain(lastIndexTimeData[1], "PE", df.at[lastIndexTimeData[1], "c"], baseSym)
                     self.strategyLogger.info(f"Premium List: {prmtb}")
@@ -352,7 +351,7 @@ class algoLogic(optOverNightAlgoLogic):
                     
                     strangle = dataCE + dataPE
 
-                    self.entryOrder(data["c"], putSym, lotSize*i, "SELL", {"Expiry": expiryEpoch, "Stoploss": stoploss},)
+                    self.entryOrder(data["c"], putSym, lotSize, "SELL", {"Expiry": expiryEpoch, "Stoploss": stoploss},)
                     i_CanChange = True
 
 
@@ -373,7 +372,7 @@ if __name__ == "__main__":
     version = "v1"
 
     # Define Start date and End date
-    startDate = datetime(2020, 4, 2, 9, 15)
+    startDate = datetime(2020, 4, 1, 9, 15)
     endDate = datetime(2025, 7, 31, 15, 30)
 
     # Create algoLogic object

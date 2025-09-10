@@ -186,6 +186,7 @@ class algoLogic(optOverNightAlgoLogic):
                 EntryAllowed = True
                 i = 3
                 pnnl = []
+                i_CanChange = False
 
 
             # Check if the current time is past the expiry time
@@ -247,7 +248,7 @@ class algoLogic(optOverNightAlgoLogic):
                     symSide = symSide[len(symSide) - 2:]      
 
 
-                    if Current_strangle_value >= 1.5 * strangle:
+                    if Current_strangle_value >= 1.4 * strangle:
                         exitType = "Combined Loss Exit"
                         pnl = row["Pnl"] 
                         pnnl.append(pnl)
@@ -264,7 +265,7 @@ class algoLogic(optOverNightAlgoLogic):
                             i_CanChange = False
 
 
-                    elif Current_strangle_value <= 0.5 * strangle:
+                    elif Current_strangle_value <= 0.6 * strangle:
                         exitType = "Combined Profit Exit"
                         pnl = row["Pnl"] 
                         pnnl.append(pnl)

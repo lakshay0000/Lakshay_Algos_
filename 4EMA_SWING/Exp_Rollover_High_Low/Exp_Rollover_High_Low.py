@@ -64,14 +64,14 @@ class algoLogic(optOverNightAlgoLogic):
         df_15min["%D"] = results["STOCHRSId_14_14_3_3"]
 
         # Filter dataframe from timestamp greater than start time timestamp
-        df_15min = df_15min[df_15min.index > startEpoch]
+        df_15min = df_15min[df_15min.index >= startEpoch]
 
         # Determine crossover signals
         df_15min["%KCross80"] = np.where((df_15min["%K"] > 80) & (df_15min["%K"].shift(1) <= 80), 1, 0)
         df_15min["%KCross20"] = np.where((df_15min["%K"] < 20) & (df_15min["%K"].shift(1) >= 20), 1, 0)
         
         df_15min["EMACross200Below"] = np.where((df_15min["EMA200"] > df_15min["c"]) & (df_15min["EMA200"].shift() < df_15min["c"].shift()), 1, 0)
-        df_15min["EMACross200Above"] = np.where((df_15min["EMA200"] < df_15min["c"]) & (df_15min["EMA200"].shift() > df_15min["c"].shift()), 1, 0)
+        df_15min["EMACross200Above"] = np.where((df_15min["EMA200"] < df_15min["c"]) & (df_15min["EMA200"].shift() > df_15min["c"].shift()), 1, 0)  
 
         
 
@@ -154,7 +154,7 @@ class algoLogic(optOverNightAlgoLogic):
                     Closelist= []
                     self.strategyLogger.info(f"{self.humanTime}\t%K_high: {df_15min.at[last15MinIndexTimeData[1], '%K']}\tclose: {df_15min.at[last15MinIndexTimeData[1], 'c']}")
 
-            if self.humanTime.date() >= (expiryDatetime - timedelta(days=1)).date():
+            if self.humanTime.date() >= (expiryDatetime).date():
                 Currentexpiry = getExpiryData(self.timeData, baseSym)['NextExpiry']
                 expiryDatetime = datetime.strptime(Currentexpiry, "%d%b%y").replace(hour=15, minute=20)
                 expiryEpoch= expiryDatetime.timestamp()
@@ -201,7 +201,7 @@ class algoLogic(optOverNightAlgoLogic):
 
 
             if ((timeData-900) in df_15min.index):
-                if (df_15min.at[last15MinIndexTimeData[1], "EMA_High"] - df_15min.at[last15MinIndexTimeData[1], "EMA_Low"])<50:
+                if len(maxlist)>=2 and len(lowlist)>=2 and (df_15min.at[last15MinIndexTimeData[1], "EMA_High"] - df_15min.at[last15MinIndexTimeData[1], "EMA_Low"])<50:
                     if len(maxlist)>=2:
                         last_two_max = maxlist[-2:]
                         if Midlist:

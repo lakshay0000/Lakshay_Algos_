@@ -229,11 +229,11 @@ class algoLogic(optOverNightAlgoLogic):
                     if row["CurrentPrice"] >= row["Stoploss"]:
                         Stranggle_Exit = True
                         if i_CanChange:
-                            if i < 6:
+                            if i < 5:
                                 i += 1
                                 self.strategyLogger.info(f"i value increased to {i}")
                             else:
-                                i = 6
+                                i = 5
                                 self.strategyLogger.info(f"i value remains {i}")
                             i_CanChange = False
 
@@ -270,11 +270,11 @@ class algoLogic(optOverNightAlgoLogic):
                         self.exitOrder(index, exitType)
                         self.strategyLogger.info(f"Current_strangle_value:{Current_strangle_value}")
                         if i_CanChange:
-                            if i < 6:
+                            if i < 5:
                                 i += 1
                                 self.strategyLogger.info(f"i value increased to {i}")
                             else:
-                                i= 6
+                                i= 5
                                 self.strategyLogger.info(f"i value remanins {i}")
 
                             i_CanChange = False
