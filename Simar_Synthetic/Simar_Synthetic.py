@@ -69,10 +69,10 @@ class algoLogic(optOverNightAlgoLogic):
 
         # Sort by percentage change
         pct_changes_sorted = sorted(pct_changes, key=lambda x: x[1], reverse=True)
-        top5 = [x[0] for x in pct_changes_sorted[:10]]
-        Perc_top5 = [x[1] for x in pct_changes_sorted[:10]]
-        bottom5 = [x[0] for x in pct_changes_sorted[-10:]]
-        Perc_bottom5 = [x[1] for x in pct_changes_sorted[-10:]]
+        top5 = [x[0] for x in pct_changes_sorted[:25]]
+        Perc_top5 = [x[1] for x in pct_changes_sorted[:25]]
+        bottom5 = [x[0] for x in pct_changes_sorted[-25:]]
+        Perc_bottom5 = [x[1] for x in pct_changes_sorted[-25:]]
         return top5, bottom5, pct_changes_sorted, Perc_top5, Perc_bottom5
 
     # Define a method to execute the algorithm
@@ -162,7 +162,9 @@ class algoLogic(optOverNightAlgoLogic):
                 # "Today_low": None,
                 # "prev_DH": None,
                 # "prev_DL": None,
-                "stockcount": None
+                "stockcount": None,
+                "Sell_Breakout": None,
+                "Buy_Breakout": None
             }
 
 
@@ -225,6 +227,10 @@ class algoLogic(optOverNightAlgoLogic):
                 #  # Log relevant information
                 # if lastIndexTimeData[1] in df.index:
                 #     self.strategyLogger.info(f"Datetime: {self.humanTime}\tClose: {df.at[lastIndexTimeData[1],'c']}")
+
+                if (self.humanTime.time() == time(9, 16)):
+                    state["Sell_Breakout"]=None
+                    state["Buy_Breakout"]=None
                 
                 # prev_day = timeData - 86400
                 if (self.humanTime.time() == time(9, 16)) and New_iteration:
@@ -243,8 +249,8 @@ class algoLogic(optOverNightAlgoLogic):
                     top_merged = []
                     bottom_merged = []
                     openEpoch = lastIndexTimeData[1]
-                    with open("/root/Lakshay_Algos/stocksList/nifty50.md") as f:
-                        stock_list = [line.strip() for line in f if line.strip()]
+                    # with open("/root/Lakshay_Algos/stocksList/nifty50.md") as f:
+                    #     stock_list = [line.strip() for line in f if line.strip()]
                     
                     #check if previoud day exists in 1d data
                     while prev_day not in df_1d.index:
@@ -447,21 +453,38 @@ class algoLogic(optOverNightAlgoLogic):
                 if (self.humanTime.time() < time(9, 30)):
                     continue
 
+                if state["Sell_Breakout"] is None:
+                    if (df_1min.at[lastIndexTimeData[1], "c"] > df_1min.at[lastIndexTimeData[1], "EMA10"]) and (df_1min.at[lastIndexTimeData[1], "o"] > df_1min.at[lastIndexTimeData[1], "EMA10"]):
+                        if (df_1min.at[lastIndexTimeData[1], "h"] > df_1min.at[lastIndexTimeData[1], "EMA10"]) and (df_1min.at[lastIndexTimeData[1], "l"] > df_1min.at[lastIndexTimeData[1], "EMA10"]):
+                            state["Sell_Breakout"] = df_1min.at[lastIndexTimeData[1], "l"]
+                
+                if state["Buy_Breakout"] is None:
+                    if (df_1min.at[lastIndexTimeData[1], "c"] < df_1min.at[lastIndexTimeData[1], "EMA10"]) and (df_1min.at[lastIndexTimeData[1], "o"] < df_1min.at[lastIndexTimeData[1], "EMA10"]):
+                        if (df_1min.at[lastIndexTimeData[1], "h"] < df_1min.at[lastIndexTimeData[1], "EMA10"]) and (df_1min.at[lastIndexTimeData[1], "l"] < df_1min.at[lastIndexTimeData[1], "EMA10"]):
+                            state["Buy_Breakout"] = df_1min.at[lastIndexTimeData[1], "h"]
+
+
+                if (self.humanTime.time() == time(15, 20)) and New_iteration:
+                    with open("/root/Lakshay_Algos/stocksList/nifty50.md") as f:
+                        stock_list = [line.strip() for line in f if line.strip()]
+
+                    New_iteration = False
+
 
 
                 # Check for entry signals and execute orders
                 if ((timeData-60) in df_1min.index) and (self.humanTime.time() < time(15, 20)):
 
-                    if (stock in top_merged) and (state["stockcount"] ==0):
-                        if df_1min.at[lastIndexTimeData[1], "EMADown"] == 1:
+                    if (stock in top_merged) and (state["stockcount"] ==0) and state["Sell_Breakout"] is not None:
+                        if (df_1min.at[lastIndexTimeData[1], "EMADown"] == 1) and (df_1min.at[lastIndexTimeData[1], "c"]<state["Sell_Breakout"]):
 
                             entry_price = df_1min.at[lastIndexTimeData[1], "c"]
 
                             self.entryOrder(entry_price, stock, (amountPerTrade//entry_price), "SELL")
 
                 
-                    if (stock in bottom_merged) and (state["stockcount"] ==0):
-                        if df_1min.at[lastIndexTimeData[1], "EMAUp"] == 1:
+                    if (stock in bottom_merged) and (state["stockcount"] ==0) and state["Buy_Breakout"] is not None:
+                        if (df_1min.at[lastIndexTimeData[1], "EMAUp"] == 1) and (df_1min.at[lastIndexTimeData[1], "c"]>state["Buy_Breakout"]):
 
                             entry_price = df_1min.at[lastIndexTimeData[1], "c"]
 

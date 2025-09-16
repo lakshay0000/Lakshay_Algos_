@@ -17,7 +17,7 @@ class algoLogic(optOverNightAlgoLogic):
     def run(self, startDate, endDate, baseSym, indexSym):
 
         # Add necessary columns to the DataFrame
-        col = ["Target", "Stoploss", "Expiry"]
+        col = ["Target", "Stoploss", "Expiry", "TradeType"]
         self.addColumnsToOpenPnlDf(col)
 
         # Convert start and end dates to timestamps
@@ -40,18 +40,7 @@ class algoLogic(optOverNightAlgoLogic):
 
         # Calculate the 20-period EMA
         df['EMA10'] = df['c'].ewm(span=10, adjust=False).mean()
-        df['EMA20'] = df['c'].ewm(span=20, adjust=False).mean()
         df['EMA30'] = df['c'].ewm(span=30, adjust=False).mean()
-        df['EMA40'] = df['c'].ewm(span=40, adjust=False).mean()
-        df['EMA60'] = df['c'].ewm(span=60, adjust=False).mean()
-        df['EMA80'] = df['c'].ewm(span=80, adjust=False).mean()
-        df['EMA100'] = df['c'].ewm(span=100, adjust=False).mean()
-        df['EMA130'] = df['c'].ewm(span=130, adjust=False).mean()
-        df['EMA160'] = df['c'].ewm(span=160, adjust=False).mean()
-        df['EMA190'] = df['c'].ewm(span=190, adjust=False).mean()
-        df['EMA220'] = df['c'].ewm(span=220, adjust=False).mean()
-        df['EMA280'] = df['c'].ewm(span=280, adjust=False).mean()
-        df['EMA340'] = df['c'].ewm(span=340, adjust=False).mean()
         df.dropna(inplace=True)
 
         df = df[df.index >= startEpoch]
@@ -59,6 +48,10 @@ class algoLogic(optOverNightAlgoLogic):
         # Determine crossover signals
         df["EMADown"] = np.where((df["EMA10"] < df["EMA10"].shift(1)), 1, 0)
         df["EMAUp"] = np.where((df["EMA10"] > df["EMA10"].shift(1)), 1, 0)
+        df["EMADown_30"] = np.where((df["EMA30"] < df["EMA30"].shift(1)), 1, 0)
+        df["EMAUp_30"] = np.where((df["EMA30"] > df["EMA30"].shift(1)), 1, 0)
+        
+
 
         # # Add 33360 to the index to match the timestamp
         # df_1d.index = df_1d.index + 33360
@@ -206,63 +199,106 @@ class algoLogic(optOverNightAlgoLogic):
 
 
                     elif (row["PositionStatus"]==1):
-                        if df.at[lastIndexTimeData[1], "EMADown"] == 1:
-                            exitType = "Negative Slope change"
-                            exit_pnl = row["CurrentPrice"] - row["EntryPrice"]
-                            self.exitOrder(index, exitType)
+                        if row["TradeType"] == "MainTrade":
+                            if df.at[lastIndexTimeData[1], "EMADown"] == 1 and df.at[lastIndexTimeData[1], "EMADown_30"] == 1:
+                                exitType = "Negative Slope change EMA 10_30"
+                                exit_pnl = row["CurrentPrice"] - row["EntryPrice"]
+                                self.exitOrder(index, exitType)
 
-                            main_trade = True
+                                main_trade = True
 
-                            if exit_pnl < 0:
-                                target = target + abs(exit_pnl)
+                                if exit_pnl < 0:
+                                    target = target + abs(exit_pnl)
 
-                                Target_Sell_Trade = True
+                                    Target_Sell_Trade = True
 
-                            elif exit_pnl > 0:
-                                if (target > 0):
-                                    target = target - abs(exit_pnl) 
-                                    if target<0:
-                                        Target_Sell_Trade = False
-                                        target = 0
-                                    else:
-                                        Target_Sell_Trade = True
-                        
-                        elif row["CurrentPrice"] >= row["Target"]:
-                            exitType = "Target Hit"
-                            self.exitOrder(index, exitType)
-                            Target_Sell_Trade = False
-                            target = 0
+                                elif exit_pnl > 0:
+                                    if (target > 0):
+                                        target = target - abs(exit_pnl) 
+                                        if target<0:
+                                            Target_Sell_Trade = False
+                                            target = 0
+                                        else:
+                                            Target_Sell_Trade = True
+
+                        elif row["TradeType"] == "LossCover":
+                            if df.at[lastIndexTimeData[1], "EMADown"] == 1 or df.at[lastIndexTimeData[1], "EMADown_30"] == 1:
+                                exitType = "Negative Slope change EMA 10 LCT"
+                                exit_pnl = row["CurrentPrice"] - row["EntryPrice"]
+                                self.exitOrder(index, exitType)
+
+                                if exit_pnl < 0:
+                                    target = target + abs(exit_pnl)
+
+                                    Target_Sell_Trade = True
+
+                                elif exit_pnl > 0:
+                                    if (target > 0):
+                                        target = target - abs(exit_pnl) 
+                                        if target<0:
+                                            Target_Sell_Trade = False
+                                            target = 0
+                                        else:
+                                            Target_Sell_Trade = True
+
+                            elif row["CurrentPrice"] >= row["Target"]:
+                                exitType = "Target Hit LCT"
+                                self.exitOrder(index, exitType)
+                                Target_Sell_Trade = False
+                                target = 0
 
 
 
 
                     elif (row["PositionStatus"]==-1):
-                        if df.at[lastIndexTimeData[1], "EMAUp"] == 1:
-                            exitType = "Positive Slope change"
-                            exit_pnl = row["CurrentPrice"] - row["EntryPrice"]
-                            self.exitOrder(index, exitType)
+                        if row["TradeType"] == "MainTrade":
+                            if df.at[lastIndexTimeData[1], "EMAUp"] == 1 and df.at[lastIndexTimeData[1], "EMAUp_30"] == 1:
+                                exitType = "Positive Slope change EMA 10_30"
+                                exit_pnl = row["CurrentPrice"] - row["EntryPrice"]
+                                self.exitOrder(index, exitType)
 
-                            main_trade = True
+                                main_trade = True
 
-                            if exit_pnl > 0:
-                                target = target + abs(exit_pnl)
+                                if exit_pnl > 0:
+                                    target = target + abs(exit_pnl)
 
-                                Target_Buy_Trade = True
+                                    Target_Buy_Trade = True
 
-                            elif exit_pnl < 0:
-                                if (target > 0):
-                                    target = target - abs(exit_pnl) 
-                                    if target<0:
-                                        Target_Buy_Trade = False
-                                        target = 0
-                                    else:
-                                        Target_Buy_Trade = True
+                                elif exit_pnl < 0:
+                                    if (target > 0):
+                                        target = target - abs(exit_pnl) 
+                                        if target<0:
+                                            Target_Buy_Trade = False
+                                            target = 0
+                                        else:
+                                            Target_Buy_Trade = True
 
-                        elif row["CurrentPrice"] <= row["Target"]:
-                            exitType = "Target Hit"
-                            self.exitOrder(index, exitType)
-                            Target_Buy_Trade = False
-                            target = 0
+                        elif row["TradeType"] == "LossCover":
+                            if df.at[lastIndexTimeData[1], "EMAUp"] == 1 or df.at[lastIndexTimeData[1], "EMAUp_30"] == 1:
+                                exitType = "Positive Slope change EMA 10 LCT"
+                                exit_pnl = row["CurrentPrice"] - row["EntryPrice"]
+                                self.exitOrder(index, exitType)
+
+                                if exit_pnl > 0:
+                                    target = target + abs(exit_pnl)
+
+                                    Target_Buy_Trade = True
+
+                                elif exit_pnl < 0:
+                                    if (target > 0):
+                                        target = target - abs(exit_pnl) 
+                                        if target<0:
+                                            Target_Buy_Trade = False
+                                            target = 0
+                                        else:
+                                            Target_Buy_Trade = True
+
+                            elif row["CurrentPrice"] <= row["Target"]:
+                                exitType = "Target Hit LCT"
+                                self.exitOrder(index, exitType)
+                                Target_Buy_Trade = False
+                                target = 0
+                        
 
 
             if (self.humanTime.time() < time(9, 30)):
@@ -271,18 +307,18 @@ class algoLogic(optOverNightAlgoLogic):
             # Check for entry signals and execute orders
             if ((timeData-60) in df.index) and (self.humanTime.time() < time(15, 20)):
                 if main_trade:
-                    if df.at[lastIndexTimeData[1], "EMADown"] == 1:
+                    if df.at[lastIndexTimeData[1], "EMADown"] == 1 and df.at[lastIndexTimeData[1], "EMADown_30"] == 1:
 
                         entry_price = df.at[lastIndexTimeData[1], "c"]
 
-                        self.entryOrder(entry_price, baseSym, (amountPerTrade//entry_price), "SELL")
+                        self.entryOrder(entry_price, baseSym, (amountPerTrade//entry_price), "SELL", {"TradeType": "MainTrade"})
                         main_trade = False
 
-                    if df.at[lastIndexTimeData[1], "EMAUp"] == 1:
+                    if df.at[lastIndexTimeData[1], "EMAUp"] == 1 and df.at[lastIndexTimeData[1], "EMAUp_30"] == 1:
 
                         entry_price = df.at[lastIndexTimeData[1], "c"]
 
-                        self.entryOrder(entry_price, baseSym, (amountPerTrade//entry_price), "BUY")
+                        self.entryOrder(entry_price, baseSym, (amountPerTrade//entry_price), "BUY", {"TradeType": "MainTrade"})
                         main_trade = False
 
                 if Target_Buy_Trade:
@@ -291,7 +327,7 @@ class algoLogic(optOverNightAlgoLogic):
                     Target = entry_price + target
                     self.strategyLogger.info(f"{self.humanTime} Target: {Target}")
 
-                    self.entryOrder(entry_price, baseSym, (amountPerTrade//entry_price), "BUY", {"Target": Target})
+                    self.entryOrder(entry_price, baseSym, (amountPerTrade//entry_price), "BUY", {"Target": Target, "TradeType": "LossCover"})
                     Target_Buy_Trade = False
 
                 if Target_Sell_Trade:
@@ -300,7 +336,7 @@ class algoLogic(optOverNightAlgoLogic):
                     Target = entry_price - target
                     self.strategyLogger.info(f"{self.humanTime} Target: {Target}")
 
-                    self.entryOrder(entry_price, baseSym, (amountPerTrade//entry_price), "SELL", {"Target": Target})
+                    self.entryOrder(entry_price, baseSym, (amountPerTrade//entry_price), "SELL", {"Target": Target, "TradeType": "LossCover"})
                     Target_Sell_Trade = False
 
 

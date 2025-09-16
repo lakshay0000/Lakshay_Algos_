@@ -203,6 +203,7 @@ class algoLogic(optOverNightAlgoLogic):
                 self.humanTime = datetime.fromtimestamp(timeData)
                 print(self.humanTime)
 
+
                 # # Skip the dates 2nd March 2024 and 18th May 2024
                 # if self.humanTime.date() == datetime(2024, 3, 2).date() or self.humanTime.date() == datetime(2024, 2, 15).date():
                 #     continue
@@ -225,6 +226,7 @@ class algoLogic(optOverNightAlgoLogic):
                 #  # Log relevant information
                 # if lastIndexTimeData[1] in df.index:
                 #     self.strategyLogger.info(f"Datetime: {self.humanTime}\tClose: {df.at[lastIndexTimeData[1],'c']}")
+
                 
                 # prev_day = timeData - 86400
                 if (self.humanTime.time() == time(9, 16)) and New_iteration:
@@ -366,13 +368,7 @@ class algoLogic(optOverNightAlgoLogic):
 
                         elif symSide == stock:
                             if (row["PositionStatus"]==1):
-
-                                if row["TradeType"] == "DirectTrade":
-                                    if (df_1min.at[lastIndexTimeData[1], "EMADown"] == 1):
-                                        exitType = "Negative Slope"
-                                        self.exitOrder(index, exitType)
-
-                                elif row["CurrentPrice"] >= 1.02*row["EntryPrice"]:
+                                if row["CurrentPrice"] >= 1.02*row["EntryPrice"]:
                                     exitType = "Target Hit"
                                     self.exitOrder(index, exitType)
                                     stock_list.remove(stock)
@@ -392,12 +388,7 @@ class algoLogic(optOverNightAlgoLogic):
 
 
                             elif (row["PositionStatus"]==-1):
-                                if row["TradeType"] == "DirectTrade":
-                                    if df_1min.at[lastIndexTimeData[1], "EMAUp"]:
-                                        exitType = "Positive Slope"
-                                        self.exitOrder(index, exitType)
-
-                                elif row["CurrentPrice"] <= 0.98*row["EntryPrice"]:
+                                if row["CurrentPrice"] <= 0.98*row["EntryPrice"]:
                                     exitType = "Target Hit"
                                     self.exitOrder(index, exitType)
                                     stock_list.remove(stock)
@@ -472,25 +463,17 @@ class algoLogic(optOverNightAlgoLogic):
 
                     New_iteration = False
 
-                if (self.humanTime.time() < time(9, 17)):
-                    continue
-
 
 
                 # Check for entry signals and execute orders
                 if ((timeData-60) in df_1min.index) and (self.humanTime.time() < time(15, 20)):
 
                     if (stock in top_merged) and (state["stockcount"] ==0):
-                        if (df_1min.at[lastIndexTimeData[1], "EMADown"] == 1) and (df_1min.at[lastIndexTimeData[1], "c"] < df_1min.at[lastIndexTimeData[1], "o"]):
+                        if df_1min.at[lastIndexTimeData[1], "EMADown"] == 1:
 
                             entry_price = df_1min.at[lastIndexTimeData[1], "c"]
 
                             self.entryOrder(entry_price, stock, (amountPerTrade//entry_price), "SELL")
-
-                        elif df_1min.at[lastIndexTimeData[1], "EMAUp"] == 1 and (df_1min.at[lastIndexTimeData[1], "c"] > df_1min.at[lastIndexTimeData[1], "o"]):
-                            entry_price = df_1min.at[lastIndexTimeData[1], "c"]
-
-                            self.entryOrder(entry_price, stock, (amountPerTrade//entry_price), "BUY", {"TradeType": "DirectTrade"})
 
                 
                     if (stock in bottom_merged) and (state["stockcount"] ==0):
@@ -499,11 +482,6 @@ class algoLogic(optOverNightAlgoLogic):
                             entry_price = df_1min.at[lastIndexTimeData[1], "c"]
 
                             self.entryOrder(entry_price, stock, (amountPerTrade//entry_price), "BUY")
-
-                        elif (df_1min.at[lastIndexTimeData[1], "EMADown"] == 1) and (df_1min.at[lastIndexTimeData[1], "c"] < df_1min.at[lastIndexTimeData[1], "o"]):
-                            entry_price = df_1min.at[lastIndexTimeData[1], "c"]
-
-                            self.entryOrder(entry_price, stock, (amountPerTrade//entry_price), "SELL", {"TradeType": "DirectTrade"})
 
 
         # Calculate final PnL and combine CSVs

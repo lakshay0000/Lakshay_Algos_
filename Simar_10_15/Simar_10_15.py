@@ -14,7 +14,7 @@ from backtestTools.histData import getEquityBacktestData, getFnoBacktestData, co
 # Define a class algoLogic that inherits from optOverNightAlgoLogic
 class algoLogic(optOverNightAlgoLogic):
 
-    def get_daily_top_bottom_stocks(self, stock_list, openEpoch, target_time_epoch, stock_1min_data):
+    def get_daily_top_bottom_stocks(self, stock_list, openEpoch, target_time_epoch, stock_1min_data, dict_1d=None, TradeType=0):
         """
         Calculates percentage change for each stock between 9:15 epoch and target_time in epoch.
         Uses pre-fetched 1-min data from stock_1min_data dict.
@@ -23,32 +23,56 @@ class algoLogic(optOverNightAlgoLogic):
         # target_time_dt = datetime.fromtimestamp(target_time_epoch)
         # target_time = target_time_dt.time()
 
+
+
         pct_changes = []
-        for stock in stock_list:
-            df = stock_1min_data.get(stock)
-            if df is None or df.empty:
-                self.strategyLogger.info(f"No data for {stock} on {openEpoch}")
-                continue
-            # # Ensure datetime column is in datetime format
-            # # df['datetime'] = pd.to_datetime(df['datetime'])
-            # open915 = df[df['datetime'].dt.time == time(9, 15)]
-            # target_row = df[df['datetime'].dt.time == target_time]
-            # if open915.empty or target_row.empty:
-            #     continue
-            if (target_time_epoch not in df.index) or (openEpoch not in df.index):
-                continue
-            
-            price915 = df.at[openEpoch, 'c']
-            price_target = df.at[target_time_epoch, 'c']
-            pct_change = ((price_target - price915) / price915) * 100
-            pct_changes.append((stock, pct_change))
+        if TradeType == 0:
+            for stock in stock_list:
+                df = stock_1min_data.get(stock)
+                if df is None or df.empty:
+                    self.strategyLogger.info(f"No data for {stock} on {openEpoch}")
+                    continue
+                # # Ensure datetime column is in datetime format
+                # # df['datetime'] = pd.to_datetime(df['datetime'])
+                # open915 = df[df['datetime'].dt.time == time(9, 15)]
+                # target_row = df[df['datetime'].dt.time == target_time]
+                # if open915.empty or target_row.empty:
+                #     continue
+                if (target_time_epoch not in df.index) or (openEpoch not in df.index):
+                    continue
+                
+                price915 = df.at[openEpoch, 'c']
+                price_target = df.at[target_time_epoch, 'c']
+                pct_change = ((price_target - price915) / price915) * 100
+                pct_changes.append((stock, pct_change))
+
+        elif TradeType == 1:
+            for stock in stock_list:
+                df = stock_1min_data.get(stock)
+                df_1d = dict_1d.get(stock)
+                if df is None or df.empty or df_1d is None or df_1d.empty:
+                    self.strategyLogger.info(f"No data for {stock} on {openEpoch}")
+                    continue
+                # # Ensure datetime column is in datetime format
+                # # df['datetime'] = pd.to_datetime(df['datetime'])
+                # open915 = df[df['datetime'].dt.time == time(9, 15)]
+                # target_row = df[df['datetime'].dt.time == target_time]
+                # if open915.empty or target_row.empty:
+                #     continue
+                if (target_time_epoch not in df.index) or (openEpoch not in df_1d.index):
+                    continue
+                
+                price915 = df_1d.at[openEpoch, 'c']
+                price_target = df.at[target_time_epoch, 'c']
+                pct_change = ((price_target - price915) / price915) * 100
+                pct_changes.append((stock, pct_change))
 
         # Sort by percentage change
         pct_changes_sorted = sorted(pct_changes, key=lambda x: x[1], reverse=True)
-        top5 = [x[0] for x in pct_changes_sorted[:5]]
-        Perc_top5 = [x[1] for x in pct_changes_sorted[:5]]
-        bottom5 = [x[0] for x in pct_changes_sorted[-5:]]
-        Perc_bottom5 = [x[1] for x in pct_changes_sorted[-5:]]
+        top5 = [x[0] for x in pct_changes_sorted[:10]]
+        Perc_top5 = [x[1] for x in pct_changes_sorted[:10]]
+        bottom5 = [x[0] for x in pct_changes_sorted[-10:]]
+        Perc_bottom5 = [x[1] for x in pct_changes_sorted[-10:]]
         return top5, bottom5, pct_changes_sorted, Perc_top5, Perc_bottom5
 
     # Define a method to execute the algorithm
@@ -85,7 +109,7 @@ class algoLogic(optOverNightAlgoLogic):
 
 
         stock_1min_data = {}
-        # stock_1d_data = {}
+        stock_1d_data = {}
         stock_state = {}
 
         for stock in stock_list:
@@ -93,7 +117,7 @@ class algoLogic(optOverNightAlgoLogic):
             try:
                 # Fetch historical data for backtesting
                 df_1min = getEquityBacktestData(stock, startEpoch-(86400*50), endEpoch, "1Min", conn=conn)
-                # df_1d = getEquityBacktestData(stock , startEpoch-(86400*50), endEpoch, "1D", conn=conn)
+                df_1d = getEquityBacktestData(stock , startEpoch-(86400*50), endEpoch, "1D", conn=conn)
             except Exception as e:
                 # Log an exception if data retrieval fails
                 self.strategyLogger.info(
@@ -102,25 +126,25 @@ class algoLogic(optOverNightAlgoLogic):
 
             # Drop rows with missing values
             df_1min.dropna(inplace=True)
-            # df_1d.dropna(inplace=True)
+            df_1d.dropna(inplace=True)
 
-            results=[]
-
-            results = taa.supertrend(df_1min["h"], df_1min["l"], df_1min["c"], length=10, multiplier=3.0)
-            # print(results)
-            df_1min["Supertrend"] = results["SUPERTd_10_3.0"]
-            df_1min.dropna(inplace=True)
+            # Calculate the 20-period EMA
+            df_1min['EMA10'] = df_1min['c'].ewm(span=10, adjust=False).mean()
 
             df_1min = df_1min[df_1min.index >= startEpoch]
 
-            # Add 33360 to the index to match the timestamp
-            # df_1d.index = df_1d.index + 33360
-            # df_1d.ti = df_1d.ti + 33360
+            # Determine crossover signals
+            df_1min["EMADown"] = np.where((df_1min["EMA10"] < df_1min["EMA10"].shift(1)), 1, 0)
+            df_1min["EMAUp"] = np.where((df_1min["EMA10"] > df_1min["EMA10"].shift(1)), 1, 0)
 
-            # df_1d = df_1d[df_1d.index >= ((startEpoch-86340)-(86400*5))]
+            # Add 33360 to the index to match the timestamp
+            df_1d.index = df_1d.index + 33360
+            df_1d.ti = df_1d.ti + 33360
+
+            df_1d = df_1d[df_1d.index >= ((startEpoch-86340)-(86400*5))]
 
             stock_1min_data[stock] = df_1min
-            # stock_1d_data[stock] = df_1d
+            stock_1d_data[stock] = df_1d
             stock_state[stock] = {
                 # "m_upper": None,
                 # "m_lower": None,
@@ -144,9 +168,9 @@ class algoLogic(optOverNightAlgoLogic):
 
             df_1min.to_csv(
                 f"{self.fileDir['backtestResultsCandleData']}{stock}_1Min.csv")
-            # df_1d.to_csv(
-            #     f"{self.fileDir['backtestResultsCandleData']}{stock}_1d.csv"
-            # )
+            df_1d.to_csv(
+                f"{self.fileDir['backtestResultsCandleData']}{stock}_1d.csv"
+            )
         
 
 
@@ -171,7 +195,7 @@ class algoLogic(optOverNightAlgoLogic):
 
                 # Then, inside your main loop, use:
                 df_1min = stock_1min_data.get(stock)
-                # df_1d = stock_1d_data.get(stock)
+                df_1d = stock_1d_data.get(stock)
                 if df_1min is None:
                     continue
 
@@ -192,7 +216,7 @@ class algoLogic(optOverNightAlgoLogic):
                 lastIndexTimeData.append(timeData-60)
 
                 # Strategy Specific Trading Time
-                if (self.humanTime.time() < time(9, 16)) | (self.humanTime.time() > time(15, 25)):
+                if (self.humanTime.time() < time(9, 16)) | (self.humanTime.time() > time(15, 20)):
                     continue
 
                 if lastIndexTimeData[1] not in df_1min.index:
@@ -201,8 +225,10 @@ class algoLogic(optOverNightAlgoLogic):
                 #  # Log relevant information
                 # if lastIndexTimeData[1] in df.index:
                 #     self.strategyLogger.info(f"Datetime: {self.humanTime}\tClose: {df.at[lastIndexTimeData[1],'c']}")
-
+                
+                # prev_day = timeData - 86400
                 if (self.humanTime.time() == time(9, 16)) and New_iteration:
+                    prev_day = timeData - 86400
                     # state["m_upper"] = None
                     # state["m_lower"] = None
                     # state["i"] = 0
@@ -219,6 +245,22 @@ class algoLogic(optOverNightAlgoLogic):
                     openEpoch = lastIndexTimeData[1]
                     with open("/root/Lakshay_Algos/stocksList/nifty50.md") as f:
                         stock_list = [line.strip() for line in f if line.strip()]
+                    
+                    #check if previoud day exists in 1d data
+                    while prev_day not in df_1d.index:
+                        prev_day = prev_day - 86400
+
+                    # top5, bottom5, pct_changes_sorted, Perc_top5, Perc_bottom5 = self.get_daily_top_bottom_stocks(stock_list, prev_day, lastIndexTimeData[1], stock_1min_data, dict_1d=stock_1d_data, TradeType=1)
+
+                    # selected_stocks = top5 + bottom5
+                    # stock_list = selected_stocks
+
+                    # top_merged = list(dict.fromkeys(top5 + top_merged))
+                    # bottom_merged = list(dict.fromkeys(bottom5 + bottom_merged))
+                    
+                    # self.strategyLogger.info(f"{self.humanTime} Gainers: {top5}, Losers: {bottom5}")
+                    # self.strategyLogger.info(f"{self.humanTime} Gainers %: {Perc_top5}, Losers %: {Perc_bottom5}")
+                    # self.strategyLogger.info(f"{self.humanTime} Top Merged: {top_merged}, Bottom Merged: {bottom_merged}")
 
                     New_iteration = False
 
@@ -239,8 +281,8 @@ class algoLogic(optOverNightAlgoLogic):
                 # prev_day = timeData - 86400
                 # if (self.humanTime.time() == time(9, 16)):
                 #     # Today_open = df_1min.at[lastIndexTimeData[1], 'o']
-                #     state["Today_high"] = df_1min.at[lastIndexTimeData[1], 'h']
-                #     state["Today_low"]  = df_1min.at[lastIndexTimeData[1], 'l']
+                #     # state["Today_high"] = df_1min.at[lastIndexTimeData[1], 'h']
+                #     # state["Today_low"]  = df_1min.at[lastIndexTimeData[1], 'l']
                 #     #check if previoud day exists in 1d data
                 #     while prev_day not in df_1d.index:
                 #         prev_day = prev_day - 86400
@@ -324,7 +366,13 @@ class algoLogic(optOverNightAlgoLogic):
 
                         elif symSide == stock:
                             if (row["PositionStatus"]==1):
-                                if row["CurrentPrice"] >= 1.005*row["EntryPrice"]:
+
+                                if row["TradeType"] == "DirectTrade":
+                                    if (df_1min.at[lastIndexTimeData[1], "EMADown"] == 1):
+                                        exitType = "Negative Slope"
+                                        self.exitOrder(index, exitType)
+
+                                elif row["CurrentPrice"] >= 1.02*row["EntryPrice"]:
                                     exitType = "Target Hit"
                                     self.exitOrder(index, exitType)
                                     stock_list.remove(stock)
@@ -344,7 +392,12 @@ class algoLogic(optOverNightAlgoLogic):
 
 
                             elif (row["PositionStatus"]==-1):
-                                if row["CurrentPrice"] <= 0.995*row["EntryPrice"]:
+                                if row["TradeType"] == "DirectTrade":
+                                    if df_1min.at[lastIndexTimeData[1], "EMAUp"]:
+                                        exitType = "Positive Slope"
+                                        self.exitOrder(index, exitType)
+
+                                elif row["CurrentPrice"] <= 0.98*row["EntryPrice"]:
                                     exitType = "Target Hit"
                                     self.exitOrder(index, exitType)
                                     stock_list.remove(stock)
@@ -397,11 +450,12 @@ class algoLogic(optOverNightAlgoLogic):
                 tradecount = self.openPnl['Symbol'].value_counts()
                 state["stockcount"]= tradecount.get(stock, 0)
 
-                if (self.humanTime.minute % 5 == 0) and (self.humanTime.time() < time(15, 20)) and New_iteration:
+                if (self.humanTime.time() == time(9, 30)) and (self.humanTime.time() < time(15, 20)) and New_iteration:
 
-                    top5, bottom5, pct_changes_sorted, Perc_top5, Perc_bottom5 = self.get_daily_top_bottom_stocks(stock_list, openEpoch, lastIndexTimeData[1], stock_1min_data)
+                    top5, bottom5, pct_changes_sorted, Perc_top5, Perc_bottom5 = self.get_daily_top_bottom_stocks(stock_list, prev_day, lastIndexTimeData[1], stock_1min_data, dict_1d=stock_1d_data, TradeType=1)
 
                     selected_stocks = top5 + bottom5
+                    stock_list = selected_stocks
 
                     top_merged = list(dict.fromkeys(top5 + top_merged))
                     bottom_merged = list(dict.fromkeys(bottom5 + bottom_merged))
@@ -412,26 +466,38 @@ class algoLogic(optOverNightAlgoLogic):
                     New_iteration = False
 
 
-                if (self.humanTime.time() < time(9, 20)):
+                if (self.humanTime.time() < time(9, 30)):
                     continue
+
+
 
                 # Check for entry signals and execute orders
                 if ((timeData-60) in df_1min.index) and (self.humanTime.time() < time(15, 20)):
 
                     if (stock in top_merged) and (state["stockcount"] ==0):
-                        if df_1min.at[lastIndexTimeData[1], "Supertrend"] == -1:
+                        if (df_1min.at[lastIndexTimeData[1], "EMADown"] == 1) and (df_1min.at[lastIndexTimeData[1], "c"] < df_1min.at[lastIndexTimeData[1], "o"]):
 
                             entry_price = df_1min.at[lastIndexTimeData[1], "c"]
 
                             self.entryOrder(entry_price, stock, (amountPerTrade//entry_price), "SELL")
 
+                        elif df_1min.at[lastIndexTimeData[1], "EMAUp"] == 1 and (df_1min.at[lastIndexTimeData[1], "c"] > df_1min.at[lastIndexTimeData[1], "o"]):
+                            entry_price = df_1min.at[lastIndexTimeData[1], "c"]
+
+                            self.entryOrder(entry_price, stock, (amountPerTrade//entry_price), "BUY", {"TradeType": "DirectTrade"})
+
                 
                     if (stock in bottom_merged) and (state["stockcount"] ==0):
-                        if df_1min.at[lastIndexTimeData[1], "Supertrend"] == 1:
+                        if df_1min.at[lastIndexTimeData[1], "EMAUp"] == 1:
 
                             entry_price = df_1min.at[lastIndexTimeData[1], "c"]
 
                             self.entryOrder(entry_price, stock, (amountPerTrade//entry_price), "BUY")
+
+                        elif (df_1min.at[lastIndexTimeData[1], "EMADown"] == 1) and (df_1min.at[lastIndexTimeData[1], "c"] < df_1min.at[lastIndexTimeData[1], "o"]):
+                            entry_price = df_1min.at[lastIndexTimeData[1], "c"]
+
+                            self.entryOrder(entry_price, stock, (amountPerTrade//entry_price), "SELL", {"TradeType": "DirectTrade"})
 
 
         # Calculate final PnL and combine CSVs
@@ -450,7 +516,7 @@ if __name__ == "__main__":
     version = "v1"
 
     # Define Start date and End date
-    startDate = datetime(2025, 6, 1, 9, 15)
+    startDate = datetime(2025, 1, 1, 9, 15)
     endDate = datetime(2025, 8, 30, 15, 30)
 
     # Create algoLogic object
