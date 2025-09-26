@@ -6,13 +6,114 @@ from backtestTools.expiry import getExpiryData
 from datetime import datetime, time, timedelta
 from backtestTools.algoLogic import optOverNightAlgoLogic
 from backtestTools.util import calculateDailyReport, limitCapital, generateReportFile
-from backtestTools.histData import getEquityBacktestData, getFnoBacktestData, connectToMongo
+from backtestTools.histData import getFnoBacktestData, connectToMongo
 
 # sys.path.insert(1, '/root/backtestTools')
 
 
 # Define a class algoLogic that inherits from optOverNightAlgoLogic
 class algoLogic(optOverNightAlgoLogic):
+
+    def getEquityBacktestData(self, symbol, startDateTime, endDateTime, interval, conn=None):
+        """
+        Retrieves backtest data i.e. range of data for a given equity symbol, start and end datetime, and interval.
+
+        Parameters:
+            symbol (string): The symbol for which backtest data is requested.
+
+            startDateTime (float or datetime): The start datetime for the backtest data.
+
+            endDateTime (float or datetime): The end datetime for the backtest data.
+
+            interval (string): The resampling interval for the data.
+
+        Returns:
+            DataFrame: A pandas DataFrame containing resampled backtest data.
+        """
+        try:
+            if isinstance(startDateTime, datetime) and isinstance(startDateTime, datetime):
+                startTimestamp = startDateTime.timestamp()
+                endTimestamp = endDateTime.timestamp()
+            elif isinstance(startDateTime, int) and isinstance(startDateTime, int):
+                startTimestamp = float(startDateTime)
+                endTimestamp = float(endDateTime)
+            elif isinstance(startDateTime, float) and isinstance(startDateTime, float):
+                startTimestamp = startDateTime
+                endTimestamp = endDateTime
+            else:
+                raise Exception(
+                    "startDateTime or endDateTime is not a timestamp(float or int) or datetime object"
+                )
+
+            if conn is None:
+                conn = connectToMongo()
+
+        
+            db = conn["STOCK_MINUTE_1"]
+            collection = db.Data
+
+            rec = collection.find({"$and": [{"sym": symbol}, {
+                                "ti": {"$gte": startTimestamp, "$lte": endTimestamp}},]})
+            rec = list(rec)
+
+            if rec:
+                df = pd.DataFrame(rec)
+
+                if 'oi' in df.columns:
+                    df['oi'] = df["oi"].fillna(0)
+                else:
+                    df['oi'] = 0
+
+                if 'v' in df.columns:
+                    df['v'] = df["v"].fillna(0)
+                else:
+                    df['v'] = 0
+
+                if 'date' in df.columns:
+                    df['date'] = df["date"].fillna(pd.to_datetime(df["ti"]))
+
+                # df.dropna(inplace=True)
+                df.drop_duplicates(subset="ti", inplace=True)
+                df.sort_values(by=["ti"], inplace=True, ascending=True)
+                df.set_index("ti", inplace=True)
+
+                df.index = pd.to_datetime(df.index, unit="s")
+                df.index = df.index + timedelta(hours=5, minutes=30)
+
+                # if interval[-1:] == "D":
+                #     df_resample = df.resample(interval).agg({
+                #         "o": "first",
+                #         "h": "max",
+                #         "l": "min",
+                #         "c": "last",
+                #         "v": "sum",
+                #         "oi": "sum",
+                #     })
+
+                df = df.between_time("09:16:00", "15:29:00")
+                df_resample = df.resample(interval, origin="9:16").agg(
+                    {"o": "first",
+                    "h": "max",
+                    "l": "min",
+                    "c": "last",
+                    "v": "sum",
+                    "oi": "sum", }
+                )
+
+                df_resample.index = (df_resample.index.values.astype(np.int64) //
+                                    10**9) - 19800
+                df_resample.insert(0, "ti", df_resample.index)
+
+                df_resample.dropna(inplace=True)
+
+                datetimeCol = pd.to_datetime(df_resample.index, unit="s")
+                datetimeCol = datetimeCol + timedelta(hours=5, minutes=30)
+                df_resample.insert(loc=1, column="datetime", value=datetimeCol)
+
+                return df_resample
+
+        except Exception as e:
+            raise Exception(e)
 
     def get_daily_top_bottom_stocks(self, stock_list, openEpoch, target_time_epoch, stock_1min_data, dict_1d=None, TradeType=0):
         """
@@ -91,10 +192,12 @@ class algoLogic(optOverNightAlgoLogic):
         # Convert start and end dates to timestamps
         startEpoch = startDate.timestamp()
         endEpoch = endDate.timestamp()
+        
 
         try:
             # Fetch historical data for backtesting
             df = getFnoBacktestData(indexSym, startEpoch, endEpoch, "1Min", conn=conn)
+            df_1d = getFnoBacktestData(indexSym, startEpoch-(86400*50), endEpoch, "1D", conn=conn)
         except Exception as e:
             # Log an exception if data retrieval fails
             self.strategyLogger.info(
@@ -103,21 +206,41 @@ class algoLogic(optOverNightAlgoLogic):
 
         # Drop rows with missing values
         df.dropna(inplace=True)
+        df_1d.dropna(inplace=True)
+
+        df_1d['ATR'] = df_1d['h'] - df_1d['l']
+        df_1d['ATR%'] = (df_1d['ATR']/df_1d['o']) * 100
+        df_1d['N_ATR%'] = df_1d['ATR%']
+        df_1d.loc[df_1d['c'] < df_1d['o'], 'N_ATR%'] = -df_1d.loc[df_1d['c'] < df_1d['o'], 'ATR%']  
+        mean_atr_percent = df_1d['N_ATR%'].mean()
+        df_1d['ATR%mean'] = mean_atr_percent
+
+        mean_neg_n_atr_percent = df_1d.loc[df_1d['N_ATR%'] < 0, 'N_ATR%'].mean()
+        mean_pos_n_atr_percent = df_1d.loc[df_1d['N_ATR%'] > 0, 'N_ATR%'].mean()
+
+        df_1d['N_ATR%_mean_neg'] = mean_neg_n_atr_percent
+        df_1d['N_ATR%_mean_pos'] = mean_pos_n_atr_percent
+
+        df_1d = df_1d[df_1d.index >= startEpoch]
 
         df.to_csv(
                 f"{self.fileDir['backtestResultsCandleData']}{indexSym}_1Min.csv")
+        df_1d.to_csv(
+                f"{self.fileDir['backtestResultsCandleData']}{indexSym}_1d.csv"
+            ) 
 
 
         stock_1min_data = {}
         stock_1d_data = {}
         stock_state = {}
+        analysis_data = []
 
         for stock in stock_list:
 
             try:
                 # Fetch historical data for backtesting
-                df_1min = getEquityBacktestData(stock, startEpoch-(86400*50), endEpoch, "1Min", conn=conn)
-                df_1d = getEquityBacktestData(stock , startEpoch-(86400*50), endEpoch, "1D", conn=conn)
+                df_1min = self.getEquityBacktestData(stock, startEpoch-(86400*50), endEpoch, "1Min", conn=conn)
+                df_1d = self.getEquityBacktestData(stock , startEpoch-(86400*50), endEpoch, "1D", conn=conn)
             except Exception as e:
                 # Log an exception if data retrieval fails
                 self.strategyLogger.info(
@@ -129,7 +252,7 @@ class algoLogic(optOverNightAlgoLogic):
             df_1d.dropna(inplace=True)
 
             # Calculate the 20-period EMA
-            df_1min['EMA10'] = df_1min['c'].ewm(span=5, adjust=False).mean()
+            df_1min['EMA10'] = df_1min['c'].ewm(span=10, adjust=False).mean()
 
             df_1min = df_1min[df_1min.index >= startEpoch]
 
@@ -137,11 +260,32 @@ class algoLogic(optOverNightAlgoLogic):
             df_1min["EMADown"] = np.where((df_1min["EMA10"] < df_1min["EMA10"].shift(1)), 1, 0)
             df_1min["EMAUp"] = np.where((df_1min["EMA10"] > df_1min["EMA10"].shift(1)), 1, 0)
 
-            # Add 33360 to the index to match the timestamp
-            df_1d.index = df_1d.index + 33360
-            df_1d.ti = df_1d.ti + 33360
+            df_1d['ATR'] = df_1d['h'] - df_1d['l']
+            df_1d['ATR%'] = (df_1d['ATR']/df_1d['o']) * 100
+            df_1d['N_ATR%'] = df_1d['ATR%']
+            df_1d.loc[df_1d['c'] < df_1d['o'], 'N_ATR%'] = -df_1d.loc[df_1d['c'] < df_1d['o'], 'ATR%']  
+            mean_atr_percent = df_1d['N_ATR%'].mean()
+            df_1d['ATR%mean'] = mean_atr_percent
 
-            df_1d = df_1d[df_1d.index >= ((startEpoch-86340)-(86400*5))]
+            mean_neg_n_atr_percent = df_1d.loc[df_1d['N_ATR%'] < 0, 'N_ATR%'].mean()
+            mean_pos_n_atr_percent = df_1d.loc[df_1d['N_ATR%'] > 0, 'N_ATR%'].mean()
+
+            df_1d['N_ATR%_mean_neg'] = mean_neg_n_atr_percent
+            df_1d['N_ATR%_mean_pos'] = mean_pos_n_atr_percent
+
+            analysis_data.append({
+                'stockname': stock,
+                'mean_atr_percent': mean_atr_percent,
+                'mean_neg_n_atr_percent': mean_neg_n_atr_percent,
+                'mean_pos_n_atr_percent': mean_pos_n_atr_percent
+            })
+            # df_1d['std'] = df_1d['SMA_10'].rolling(window=10).std()
+
+            # Add 33360 to the index to match the timestamp
+            # df_1d.index = df_1d.index + 33360
+            # df_1d.ti = df_1d.ti + 33360
+
+            df_1d = df_1d[df_1d.index >= startEpoch]
 
             stock_1min_data[stock] = df_1min
             stock_1d_data[stock] = df_1d
@@ -179,6 +323,10 @@ class algoLogic(optOverNightAlgoLogic):
             df_1d.to_csv(
                 f"{self.fileDir['backtestResultsCandleData']}{stock}_1d.csv"
             )
+
+        # After the for loop:
+        df_analysis = pd.DataFrame(analysis_data)
+        df_analysis.to_csv("stock_analysis.csv", index=False)
         
 
 
@@ -402,13 +550,15 @@ class algoLogic(optOverNightAlgoLogic):
 
                 if (self.humanTime.time() in check_times) and (self.humanTime.time() < time(15, 20)) and New_iteration:
 
-                    top5, bottom5, pct_changes_sorted, Perc_top5, Perc_bottom5 = self.get_daily_top_bottom_stocks(main_stock_list, prev_day, lastIndexTimeData[1], stock_1min_data, dict_1d=stock_1d_data, TradeType=1)
+                    top5, bottom5, pct_changes_sorted, Perc_top5, Perc_bottom5 = self.get_daily_top_bottom_stocks(main_stock_list, openEpoch, lastIndexTimeData[1], stock_1min_data, dict_1d=stock_1d_data, TradeType=0)
 
                     selected_stocks = top5 + bottom5
                     stock_merged = list(dict.fromkeys(selected_stocks + stock_merged))
 
                     if self.humanTime.time() == time(9, 31):
                        stock_list = stock_merged
+                       self.strategyLogger.info(f"StockTraded :- {stock_merged}")
+                       self.strategyLogger.info(f"No_StockTraded :- {len(stock_merged)}")
 
                     # top_merged = list(dict.fromkeys(top5 + top_merged))
                     # bottom_merged = list(dict.fromkeys(bottom5 + bottom_merged))
@@ -446,7 +596,6 @@ class algoLogic(optOverNightAlgoLogic):
                             self.entryOrder(entry_price, stock, (amountPerTrade//buffer), "SELL", {"Target": target, "Stoploss": stoploss})
                             state["main_trade"] = False
                             state["TradeLimit"] = state["TradeLimit"]+1
-                            main_stock_list.remove(stock)
 
 
                         if (df_1min.at[lastIndexTimeData[1], "c"] > state["High"]):
@@ -459,9 +608,8 @@ class algoLogic(optOverNightAlgoLogic):
                             self.entryOrder(entry_price, stock, (amountPerTrade//buffer), "BUY", {"Target": target, "Stoploss": stoploss})
                             state["main_trade"] = False
                             state["TradeLimit"] = state["TradeLimit"]+1 
-                            main_stock_list.remove(stock)
 
-                    if (stock in stock_merged) and state["SecondTrade"] and (state["TradeLimit"]<4):
+                    if (stock in stock_merged) and state["SecondTrade"] and (state["TradeLimit"]<3):
                         if (df_1min.at[lastIndexTimeData[1], 'EMA10'] < state["Low"]) and (df_1min.at[lastIndexTimeData[1], 'c'] < state["Low"]):
 
                             entry_price = df_1min.at[lastIndexTimeData[1], "c"]

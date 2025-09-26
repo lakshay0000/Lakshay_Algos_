@@ -40,18 +40,6 @@ class algoLogic(optOverNightAlgoLogic):
 
         # Calculate the 20-period EMA
         df['EMA10'] = df['c'].ewm(span=10, adjust=False).mean()
-        df['EMA20'] = df['c'].ewm(span=20, adjust=False).mean()
-        df['EMA30'] = df['c'].ewm(span=30, adjust=False).mean()
-        df['EMA40'] = df['c'].ewm(span=40, adjust=False).mean()
-        df['EMA60'] = df['c'].ewm(span=60, adjust=False).mean()
-        df['EMA80'] = df['c'].ewm(span=80, adjust=False).mean()
-        df['EMA100'] = df['c'].ewm(span=100, adjust=False).mean()
-        df['EMA130'] = df['c'].ewm(span=130, adjust=False).mean()
-        df['EMA160'] = df['c'].ewm(span=160, adjust=False).mean()
-        df['EMA190'] = df['c'].ewm(span=190, adjust=False).mean()
-        df['EMA220'] = df['c'].ewm(span=220, adjust=False).mean()
-        df['EMA280'] = df['c'].ewm(span=280, adjust=False).mean()
-        df['EMA340'] = df['c'].ewm(span=340, adjust=False).mean()
         df.dropna(inplace=True)
 
         df = df[df.index >= startEpoch]
@@ -82,12 +70,11 @@ class algoLogic(optOverNightAlgoLogic):
         # expiryEpoch= expiryDatetime.timestamp()
         # lotSize = int(getExpiryData(self.timeData, baseSym)["LotSize"])
 
-        amountPerTrade = 100000
+        amountPerTrade = 500
         main_trade = True
-        i=0
-        list1=['EMA10','EMA20','EMA30','EMA40','EMA60','EMA80','EMA100','EMA130','EMA160','EMA190','EMA220','EMA280','EMA340']
-        Ema= None
         TradeLimit = 0
+        high_list=[]
+        low_list=[]
 
 
 
@@ -117,14 +104,24 @@ class algoLogic(optOverNightAlgoLogic):
             if lastIndexTimeData[1] not in df.index:
                 continue
 
-            if lastIndexTimeData[1] == 1748835900:
-                continue
-
             if (self.humanTime.time() == time(9, 16)):
-                i=0
-                Ema=None
                 main_trade = True
                 TradeLimit = 0
+                high_list=[]
+                low_list=[]
+                High = None
+                Low = None
+                Range=None
+
+            if (self.humanTime.time() > time(9, 16)) and (self.humanTime.time() <= time(9, 21)):
+                high_list.append(df.at[lastIndexTimeData[1], "h"])
+                low_list.append(df.at[lastIndexTimeData[1], "l"])
+                if (self.humanTime.time() == time(9, 21)):
+                    High = max(high_list)
+                    Low = min(low_list)
+                    Range = High-Low
+                    self.strategyLogger.info(f"{self.humanTime} Range: {Range} High: {High} Low: {Low}")
+
 
             #  # Log relevant information
             # if lastIndexTimeData[1] in df.index:
@@ -147,37 +144,6 @@ class algoLogic(optOverNightAlgoLogic):
 
             # Calculate and update PnL
             self.pnlCalculator()
-
-            if self.humanTime.time() <= time(9, 30):
-                Ema= list1[i]
-                if (self.humanTime.minute % 5 == 0):
-                    i = i+1
-                    Ema= list1[i]
-                    self.strategyLogger.info(f"Datetime: {self.humanTime}\tEma: {Ema} i: {i}")
-
-            if self.humanTime.time() > time(9, 30) and self.humanTime.time()<= time(10, 0):
-                if (self.humanTime.minute % 10 == 0):
-                    i = i+1
-                    Ema = list1[i]
-                    self.strategyLogger.info(f"Datetime: {self.humanTime}\tEma: {Ema} i: {i}")
-
-            if self.humanTime.time() > time(10, 0) and self.humanTime.time() <= time(11, 0):
-                if (self.humanTime.minute % 15 == 0):
-                    i = i+1
-                    Ema = list1[i]
-                    self.strategyLogger.info(f"Datetime: {self.humanTime}\tEma: {Ema} i: {i}")
-
-            if self.humanTime.time() == time(11, 30):
-                i=i+1
-                Ema = list1[i]
-                self.strategyLogger.info(f"Datetime: {self.humanTime}\tEma: {Ema} i: {i}")
-
-            if self.humanTime.time() == time(12, 0):
-                i=i+1
-                Ema = list1[i]
-                self.strategyLogger.info(f"Datetime: {self.humanTime}\tEma: {Ema} i: {i}")
-
-
 
 
             #Updating daily index
@@ -240,44 +206,69 @@ class algoLogic(optOverNightAlgoLogic):
                     if self.humanTime.time() >= time(15, 20):
                         exitType = "Time Up"
                         self.exitOrder(index, exitType)
-                        main_trade = True
 
 
                     elif (row["PositionStatus"]==1):
-                        if df.at[lastIndexTimeData[0], Ema] > df.at[lastIndexTimeData[1], Ema]:
-                            exitType = "Negative Slope change"
+                        if (df.at[lastIndexTimeData[1], 'EMA10'] < Low) and (df.at[lastIndexTimeData[1], 'c'] < Low):
+                            exitType = "Stoploss Lower Range Hit"
                             self.exitOrder(index, exitType)
+                            if TradeLimit<2:
 
-                            main_trade = True
+                                entry_price = df.at[lastIndexTimeData[1], "c"]
+                                buffer= (Low - entry_price) + Range
+                                target= entry_price - (buffer*2.5)
+
+                                self.entryOrder(entry_price, baseSym, (amountPerTrade//buffer), "SELL", {"Target": target})
+                                TradeLimit = TradeLimit+1
+
+
+                        elif row["CurrentPrice"] >= row["Target"]:
+                            exitType = "Target Hit"
+                            self.exitOrder(index, exitType)
 
 
                     elif (row["PositionStatus"]==-1):
-                        if df.at[lastIndexTimeData[0], Ema] < df.at[lastIndexTimeData[1], Ema]:
-                            exitType = "Positive Slope change"
+                        if (df.at[lastIndexTimeData[1], 'EMA10'] > High) and (df.at[lastIndexTimeData[1], 'c'] > High):
+                            exitType = "Stoploss Upper Range Hit"
+                            self.exitOrder(index, exitType)
+                            if TradeLimit<2:
+
+                                entry_price = df.at[lastIndexTimeData[1], "c"]
+                                buffer = (entry_price - High) + Range
+                                target = entry_price + (buffer*2.5)
+
+                                self.entryOrder(entry_price, baseSym, (amountPerTrade//buffer), "BUY", {"Target": target})
+                                TradeLimit = TradeLimit+1
+
+
+                        elif row["CurrentPrice"] <= row["Target"]:
+                            exitType = "Target Hit"
                             self.exitOrder(index, exitType)
 
-                            main_trade = True
 
-
-            # if (self.humanTime.time() < time(9, 30)):
-            #     continue
+            if (self.humanTime.time() < time(9, 21)):
+                continue
             
             # Check for entry signals and execute orders
             if ((timeData-60) in df.index) and (self.humanTime.time() < time(15, 20)):
-                if main_trade and TradeLimit<3:
-                    if df.at[lastIndexTimeData[0], Ema] > df.at[lastIndexTimeData[1], Ema]:
+                if main_trade:
+                    if (df.at[lastIndexTimeData[1], 'c'] < Low):
 
                         entry_price = df.at[lastIndexTimeData[1], "c"]
+                        buffer= (Low - entry_price) + Range
+                        target= entry_price - (buffer*2.5)
 
-                        self.entryOrder(entry_price, baseSym, (amountPerTrade//entry_price), "SELL")
+                        self.entryOrder(entry_price, baseSym, (amountPerTrade//buffer), "SELL", {"Target": target})
                         main_trade = False
                         TradeLimit = TradeLimit+1
 
-                    if df.at[lastIndexTimeData[0], Ema] < df.at[lastIndexTimeData[1], Ema]:
+                    if (df.at[lastIndexTimeData[1], 'c'] > High):
 
                         entry_price = df.at[lastIndexTimeData[1], "c"]
+                        buffer = (entry_price - High) + Range
+                        target = entry_price + (buffer*2.5)
 
-                        self.entryOrder(entry_price, baseSym, (amountPerTrade//entry_price), "BUY")
+                        self.entryOrder(entry_price, baseSym, (amountPerTrade//buffer), "BUY", {"Target": target})
                         main_trade = False
                         TradeLimit = TradeLimit+1
 
@@ -298,15 +289,15 @@ if __name__ == "__main__":
     version = "v1"
 
     # Define Start date and End date
-    startDate = datetime(2025, 6, 2, 9, 15)
+    startDate = datetime(2025, 1, 1, 9, 15)
     endDate = datetime(2025, 8, 30, 15, 30)
 
     # Create algoLogic object
     algo = algoLogic(devName, strategyName, version)
 
     # Define Index Name
-    baseSym = "MARUTI"
-    indexName = "MARUTI"
+    baseSym = "ONGC"
+    indexName = "ONGC"
 
     # Execute the algorithm
     closedPnl, fileDir = algo.run(startDate, endDate, baseSym, indexName)

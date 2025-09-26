@@ -351,7 +351,7 @@ class algoLogic(optOverNightAlgoLogic):
                                     if stock in top_merged:
                                         top_merged.remove(stock)
                                     if stock in bottom_merged:
-                                        bottom_merged.remove(stock)
+                                        bottom_merged.remove(stock)  
 
                                 elif row["CurrentPrice"] >= 1.02*row["EntryPrice"]:
                                     exitType = "Stoploss Hit"

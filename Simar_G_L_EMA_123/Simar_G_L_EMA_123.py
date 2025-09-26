@@ -80,7 +80,7 @@ class algoLogic(optOverNightAlgoLogic):
         conn = connectToMongo()
 
         # Read your stock list
-        with open("/root/Lakshay_Algos/stocksList/nifty50.md") as f:
+        with open("/root/Lakshay_Algos/stocksList/fnoWithoutNiftyStocks.md") as f:
             stock_list = [line.strip() for line in f if line.strip()]
 
 
@@ -123,19 +123,24 @@ class algoLogic(optOverNightAlgoLogic):
                 self.strategyLogger.info(
                     f"Data not found for {baseSym} in range {startDate} to {endDate}")
                 raise Exception(e)
+            
+            if df_1min is None or df_1d is None:
+                self.strategyLogger.info(f"No data for {stock} in 1Min or 1D timeframe.")
+                continue
 
             # Drop rows with missing values
             df_1min.dropna(inplace=True)
             df_1d.dropna(inplace=True)
+            
 
             # Calculate the 20-period EMA
-            df_1min['EMA10'] = df_1min['c'].ewm(span=5, adjust=False).mean()
+            df_1min['EMA10'] = df_1min['c'].ewm(span=10, adjust=False).mean()
 
             df_1min = df_1min[df_1min.index >= startEpoch]
 
             # Determine crossover signals
-            df_1min["EMADown"] = np.where((df_1min["EMA10"] < df_1min["EMA10"].shift(1)), 1, 0)
-            df_1min["EMAUp"] = np.where((df_1min["EMA10"] > df_1min["EMA10"].shift(1)), 1, 0)
+            # df_1min["EMADown"] = np.where((df_1min["EMA10"] < df_1min["EMA10"].shift(1)), 1, 0)
+            # df_1min["EMAUp"] = np.where((df_1min["EMA10"] > df_1min["EMA10"].shift(1)), 1, 0)
 
             # Add 33360 to the index to match the timestamp
             df_1d.index = df_1d.index + 33360
@@ -170,7 +175,6 @@ class algoLogic(optOverNightAlgoLogic):
                 "High": None,
                 "Low": None,
                 "Range": None,
-                "SecondTrade": False,
             }
 
 
@@ -228,6 +232,7 @@ class algoLogic(optOverNightAlgoLogic):
                     continue
 
                 if lastIndexTimeData[1] not in df_1min.index:
+                    self.strategyLogger.info(f"{self.humanTime} Data not in index for {stock}")
                     continue
 
                 #  # Log relevant information
@@ -250,10 +255,7 @@ class algoLogic(optOverNightAlgoLogic):
                     state["High"] = None
                     state["Low"] = None
                     state["Range"] = None
-                    state["SecondTrade"] = False
                     openEpoch = lastIndexTimeData[1]
-                    main_stock_list = stock_list
-                    stock_merged = []
                     # with open("/root/Lakshay_Algos/stocksList/nifty50.md") as f:
                     #     stock_list = [line.strip() for line in f if line.strip()]
                     
@@ -373,10 +375,17 @@ class algoLogic(optOverNightAlgoLogic):
 
                         elif symSide == stock:
                             if (row["PositionStatus"]==1):
-                                if (df_1min.at[lastIndexTimeData[1], 'EMA10'] < row["Stoploss"]) and (df_1min.at[lastIndexTimeData[1], 'c'] < row["Stoploss"]):
-                                    exitType = "Stoploss Lower half Range Hit"
+                                if (df_1min.at[lastIndexTimeData[1], 'EMA10'] < state["Low"]) and (df_1min.at[lastIndexTimeData[1], 'c'] < state["Low"]):
+                                    exitType = "Stoploss Lower Range Hit"
                                     self.exitOrder(index, exitType)
-                                    state["SecondTrade"] = True
+                                    if state["TradeLimit"]<2:
+
+                                        entry_price = df_1min.at[lastIndexTimeData[1], "c"]
+                                        buffer= (state["Low"] - entry_price) + state["Range"]
+                                        target= entry_price - buffer
+
+                                        self.entryOrder(entry_price, stock, (amountPerTrade//buffer), "SELL", {"Target": target})
+                                        state["TradeLimit"] = state["TradeLimit"]+1
 
 
                                 elif row["CurrentPrice"] >= row["Target"]:
@@ -385,10 +394,17 @@ class algoLogic(optOverNightAlgoLogic):
 
 
                             elif (row["PositionStatus"]==-1):
-                                if (df_1min.at[lastIndexTimeData[1], 'EMA10'] > row["Stoploss"]) and (df_1min.at[lastIndexTimeData[1], 'c'] > row["Stoploss"]):
-                                    exitType = "Stoploss Upper half Range Hit"
+                                if (df_1min.at[lastIndexTimeData[1], 'EMA10'] > state["High"]) and (df_1min.at[lastIndexTimeData[1], 'c'] > state["High"]):
+                                    exitType = "Stoploss Upper Range Hit"
                                     self.exitOrder(index, exitType)
-                                    state["SecondTrade"] = True
+                                    if state["TradeLimit"]<2:
+
+                                        entry_price = df_1min.at[lastIndexTimeData[1], "c"]
+                                        buffer = (entry_price - state["High"]) + state["Range"]
+                                        target = entry_price + buffer
+                                        
+                                        self.entryOrder(entry_price, stock, (amountPerTrade//buffer), "BUY", {"Target": target})
+                                        state["TradeLimit"] = state["TradeLimit"]+1
 
 
                                 elif row["CurrentPrice"] <= row["Target"]:
@@ -398,17 +414,13 @@ class algoLogic(optOverNightAlgoLogic):
 
                 tradecount = self.openPnl['Symbol'].value_counts()
                 state["stockcount"]= tradecount.get(stock, 0)
-                check_times = [time(9, 21), time(9, 26), time(9, 31)]
 
-                if (self.humanTime.time() in check_times) and (self.humanTime.time() < time(15, 20)) and New_iteration:
+                if (self.humanTime.time() == time(9, 21)) and (self.humanTime.time() < time(15, 20)) and New_iteration:
 
-                    top5, bottom5, pct_changes_sorted, Perc_top5, Perc_bottom5 = self.get_daily_top_bottom_stocks(main_stock_list, prev_day, lastIndexTimeData[1], stock_1min_data, dict_1d=stock_1d_data, TradeType=1)
+                    top5, bottom5, pct_changes_sorted, Perc_top5, Perc_bottom5 = self.get_daily_top_bottom_stocks(stock_list, prev_day, lastIndexTimeData[1], stock_1min_data, dict_1d=stock_1d_data, TradeType=1)
 
                     selected_stocks = top5 + bottom5
-                    stock_merged = list(dict.fromkeys(selected_stocks + stock_merged))
-
-                    if self.humanTime.time() == time(9, 31):
-                       stock_list = stock_merged
+                    stock_list = selected_stocks
 
                     # top_merged = list(dict.fromkeys(top5 + top_merged))
                     # bottom_merged = list(dict.fromkeys(bottom5 + bottom_merged))
@@ -425,7 +437,7 @@ class algoLogic(optOverNightAlgoLogic):
 
 
                 if (self.humanTime.time() == time(15, 20)) and New_iteration:
-                    with open("/root/Lakshay_Algos/stocksList/nifty50.md") as f:
+                    with open("/root/Lakshay_Algos/stocksList/fnoWithoutNiftyStocks.md") as f:
                         stock_list = [line.strip() for line in f if line.strip()]
 
                     New_iteration = False
@@ -435,18 +447,16 @@ class algoLogic(optOverNightAlgoLogic):
                 # Check for entry signals and execute orders
                 if ((timeData-60) in df_1min.index) and (self.humanTime.time() < time(15, 20)):
 
-                    if (stock in stock_merged) and state["main_trade"]:
+                    if (stock in selected_stocks) and state["main_trade"]:
                         if (df_1min.at[lastIndexTimeData[1], "c"] < state["Low"]):
 
                             entry_price = df_1min.at[lastIndexTimeData[1], "c"]
                             buffer= (state["Low"] - entry_price) + state["Range"]
                             target= entry_price - buffer
-                            stoploss = entry_price + (buffer/2)
 
-                            self.entryOrder(entry_price, stock, (amountPerTrade//buffer), "SELL", {"Target": target, "Stoploss": stoploss})
+                            self.entryOrder(entry_price, stock, (amountPerTrade//buffer), "SELL", {"Target": target})
                             state["main_trade"] = False
                             state["TradeLimit"] = state["TradeLimit"]+1
-                            main_stock_list.remove(stock)
 
 
                         if (df_1min.at[lastIndexTimeData[1], "c"] > state["High"]):
@@ -454,37 +464,10 @@ class algoLogic(optOverNightAlgoLogic):
                             entry_price = df_1min.at[lastIndexTimeData[1], "c"]
                             buffer = (entry_price - state["High"]) + state["Range"]
                             target = entry_price + buffer
-                            stoploss = entry_price - (buffer/2)
 
-                            self.entryOrder(entry_price, stock, (amountPerTrade//buffer), "BUY", {"Target": target, "Stoploss": stoploss})
+                            self.entryOrder(entry_price, stock, (amountPerTrade//buffer), "BUY", {"Target": target})
                             state["main_trade"] = False
-                            state["TradeLimit"] = state["TradeLimit"]+1 
-                            main_stock_list.remove(stock)
-
-                    if (stock in stock_merged) and state["SecondTrade"] and (state["TradeLimit"]<4):
-                        if (df_1min.at[lastIndexTimeData[1], 'EMA10'] < state["Low"]) and (df_1min.at[lastIndexTimeData[1], 'c'] < state["Low"]):
-
-                            entry_price = df_1min.at[lastIndexTimeData[1], "c"]
-                            buffer= (state["Low"] - entry_price) + state["Range"]
-                            target= entry_price - buffer
-                            stoploss = entry_price + (buffer/2)
-
-                            self.entryOrder(entry_price, stock, (amountPerTrade//buffer), "SELL", {"Target": target, "Stoploss": stoploss})
-                            state["SecondTrade"] = False
                             state["TradeLimit"] = state["TradeLimit"]+1
-
-
-                        if (df_1min.at[lastIndexTimeData[1], 'EMA10'] > state["High"]) and (df_1min.at[lastIndexTimeData[1], 'c'] > state["High"]):
-
-                            entry_price = df_1min.at[lastIndexTimeData[1], "c"]
-                            buffer = (entry_price - state["High"]) + state["Range"]
-                            target = entry_price + buffer
-                            stoploss = entry_price - (buffer/2)
-
-                            self.entryOrder(entry_price, stock, (amountPerTrade//buffer), "BUY", {"Target": target, "Stoploss": stoploss})
-                            state["SecondTrade"] = False
-                            state["TradeLimit"] = state["TradeLimit"]+1 
-
 
 
         # Calculate final PnL and combine CSVs

@@ -129,7 +129,7 @@ class algoLogic(optOverNightAlgoLogic):
             df_1d.dropna(inplace=True)
 
             # Calculate the 20-period EMA
-            df_1min['EMA10'] = df_1min['c'].ewm(span=5, adjust=False).mean()
+            df_1min['EMA10'] = df_1min['c'].ewm(span=10, adjust=False).mean()
 
             df_1min = df_1min[df_1min.index >= startEpoch]
 
@@ -402,13 +402,15 @@ class algoLogic(optOverNightAlgoLogic):
 
                 if (self.humanTime.time() in check_times) and (self.humanTime.time() < time(15, 20)) and New_iteration:
 
-                    top5, bottom5, pct_changes_sorted, Perc_top5, Perc_bottom5 = self.get_daily_top_bottom_stocks(main_stock_list, prev_day, lastIndexTimeData[1], stock_1min_data, dict_1d=stock_1d_data, TradeType=1)
+                    top5, bottom5, pct_changes_sorted, Perc_top5, Perc_bottom5 = self.get_daily_top_bottom_stocks(main_stock_list, openEpoch, lastIndexTimeData[1], stock_1min_data, dict_1d=stock_1d_data, TradeType=0)
 
                     selected_stocks = top5 + bottom5
                     stock_merged = list(dict.fromkeys(selected_stocks + stock_merged))
 
                     if self.humanTime.time() == time(9, 31):
                        stock_list = stock_merged
+                       self.strategyLogger.info(f"StockTraded :- {stock_merged}")
+                       self.strategyLogger.info(f"No_StockTraded :- {len(stock_merged)}")
 
                     # top_merged = list(dict.fromkeys(top5 + top_merged))
                     # bottom_merged = list(dict.fromkeys(bottom5 + bottom_merged))
@@ -446,7 +448,6 @@ class algoLogic(optOverNightAlgoLogic):
                             self.entryOrder(entry_price, stock, (amountPerTrade//buffer), "SELL", {"Target": target, "Stoploss": stoploss})
                             state["main_trade"] = False
                             state["TradeLimit"] = state["TradeLimit"]+1
-                            main_stock_list.remove(stock)
 
 
                         if (df_1min.at[lastIndexTimeData[1], "c"] > state["High"]):
@@ -459,9 +460,8 @@ class algoLogic(optOverNightAlgoLogic):
                             self.entryOrder(entry_price, stock, (amountPerTrade//buffer), "BUY", {"Target": target, "Stoploss": stoploss})
                             state["main_trade"] = False
                             state["TradeLimit"] = state["TradeLimit"]+1 
-                            main_stock_list.remove(stock)
 
-                    if (stock in stock_merged) and state["SecondTrade"] and (state["TradeLimit"]<4):
+                    if (stock in stock_merged) and state["SecondTrade"] and (state["TradeLimit"]<3):
                         if (df_1min.at[lastIndexTimeData[1], 'EMA10'] < state["Low"]) and (df_1min.at[lastIndexTimeData[1], 'c'] < state["Low"]):
 
                             entry_price = df_1min.at[lastIndexTimeData[1], "c"]
