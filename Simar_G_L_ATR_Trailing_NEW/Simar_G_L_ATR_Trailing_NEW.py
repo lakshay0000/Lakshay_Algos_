@@ -84,7 +84,7 @@ class algoLogic(optOverNightAlgoLogic):
         #     stock_list = [line.strip() for line in f if line.strip()]
 
         # Read the CSV at the start of your run method
-        analysis_df = pd.read_csv("/root/Lakshay_Algos/stocksList/stock_analysis_JULY_DEC.csv")
+        analysis_df = pd.read_csv("/root/Lakshay_Algos/stocksList/stock_analysis_FEB_JULY.csv")
 
         # Select the first 10 stocks from the stockname column
         stock_list = analysis_df['stockname'].head(10).tolist()
@@ -191,7 +191,8 @@ class algoLogic(optOverNightAlgoLogic):
                 "High": None,
                 "Low": None,
                 "Range": None,
-                "SecondTrade": False,
+                "SecondBuyTrade": False,
+                "SecondSellTrade": False,
                 "Positive_Mean": mean_pos_n_atr_percent,
                 "Negative_Mean": mean_neg_n_atr_percent,
                 # "Special_Buy_Trade": False,
@@ -283,7 +284,8 @@ class algoLogic(optOverNightAlgoLogic):
                     # state["Special_Buy_Trade"] = False
                     # state["Special_Sell_Trade"] = False
                     state["Range"] = None
-                    state["SecondTrade"] = False
+                    state["SecondBuyTrade"] = False
+                    state["SecondSellTrade"] = False
                     openEpoch = lastIndexTimeData[1]
                     self.strategyLogger.info(f"{self.humanTime} stocklist: {stock_list}")
                     # stock_merged = []
@@ -428,9 +430,9 @@ class algoLogic(optOverNightAlgoLogic):
                                     pnl= row["CurrentPrice"] - row["EntryPrice"]
                                     self.exitOrder(index, exitType)
                                     if pnl > state["Range"]:
-                                        state["SecondTrade"] = False
+                                        state["SecondBuyTrade"] = True
                                     else:
-                                        state["SecondTrade"] = True
+                                        state["SecondSellTrade"] = True
 
 
                                 # elif row["CurrentPrice"] >= row["Target"]:
@@ -457,9 +459,9 @@ class algoLogic(optOverNightAlgoLogic):
                                     pnl= row["EntryPrice"] - row["CurrentPrice"]
                                     self.exitOrder(index, exitType)
                                     if pnl > state["Range"]:
-                                        state["SecondTrade"] = False
+                                        state["SecondSellTrade"] = True
                                     else:
-                                        state["SecondTrade"] = True
+                                        state["SecondBuyTrade"] = True
 
 
                                 # elif row["CurrentPrice"] <= row["Target"]:
@@ -469,6 +471,19 @@ class algoLogic(optOverNightAlgoLogic):
   
                 tradecount = self.openPnl['Symbol'].value_counts()
                 state["stockcount"]= tradecount.get(stock, 0)
+
+                if state["SecondBuyTrade"]:
+                    if df_1min.at[lastIndexTimeData[1], 'EMA10'] < state["Low"]:
+                        state["Low"] = df_1min.at[lastIndexTimeData[1], 'EMA10']
+                        state["High"] = state["Low"] + state["Range"]
+                        self.strategyLogger.info(f"{self.humanTime} {stock} New Low: {state['Low']}, High: {state['High']}")
+
+                if state["SecondSellTrade"]:
+                    if df_1min.at[lastIndexTimeData[1], 'EMA10'] > state["High"]:
+                        state["High"] = df_1min.at[lastIndexTimeData[1], 'EMA10']
+                        state["Low"] = state["High"] - state["Range"]
+                        self.strategyLogger.info(f"{self.humanTime} {stock} New High: {state['High']}, Low: {state['Low']}")
+
 
                 # if (self.humanTime.time() == time(9, 21)) and (self.humanTime.time() < time(15, 20)) and New_iteration:
 
@@ -537,7 +552,7 @@ class algoLogic(optOverNightAlgoLogic):
                             state["TradeLimit"] = state["TradeLimit"]+1 
 
 
-                    if state["SecondTrade"] and (state["TradeLimit"]<3):
+                    if state["SecondSellTrade"] and (state["TradeLimit"]<3):
                         if (df_1min.at[lastIndexTimeData[1], 'c'] < state["Low"]) and (df_1min.at[lastIndexTimeData[1], 'EMA10'] < state["Low"]):
 
                             entry_price = df_1min.at[lastIndexTimeData[1], "c"]
@@ -551,10 +566,11 @@ class algoLogic(optOverNightAlgoLogic):
                             # stoploss = entry_price + (buffer/2)
 
                             self.entryOrder(entry_price, stock, (amountPerTrade//entry_price), "SELL", {"Target": target})
-                            state["SecondTrade"] = False
+                            state["SecondSellTrade"] = False
                             state["TradeLimit"] = state["TradeLimit"]+1
 
 
+                    if state["SecondBuyTrade"] and (state["TradeLimit"]<3):
                         if (df_1min.at[lastIndexTimeData[1], 'c'] > state["High"]) and (df_1min.at[lastIndexTimeData[1], 'EMA10'] > state["High"]):
 
                             entry_price = df_1min.at[lastIndexTimeData[1], "c"]
@@ -568,7 +584,7 @@ class algoLogic(optOverNightAlgoLogic):
                             # stoploss = entry_price - (buffer/2)   Low
 
                             self.entryOrder(entry_price, stock, (amountPerTrade//entry_price), "BUY", {"Target": target})
-                            state["SecondTrade"] = False
+                            state["SecondBuyTrade"] = False
                             state["TradeLimit"] = state["TradeLimit"]+1
 
 
@@ -589,8 +605,8 @@ if __name__ == "__main__":
     version = "v1"
 
     # Define Start date and End date
-    startDate = datetime(2025, 1, 1, 9, 15)
-    endDate = datetime(2025, 1, 30, 15, 30)
+    startDate = datetime(2025, 8, 1, 9, 15)
+    endDate = datetime(2025, 8, 30, 15, 30)
 
     # Create algoLogic object
     algo = algoLogic(devName, strategyName, version)
