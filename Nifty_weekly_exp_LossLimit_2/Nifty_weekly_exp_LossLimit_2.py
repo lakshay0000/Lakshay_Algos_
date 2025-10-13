@@ -330,9 +330,9 @@ class algoLogic(optOverNightAlgoLogic):
                         self.strategyLogger.info(e)
 
                     dataCE = data["c"]
-                    stoploss = 2 * data["c"]
+                    CE_stoploss = 2 * data["c"]
 
-                    self.entryOrder(data["c"], callSym, lotSize*i, "SELL", {"Expiry": expiryEpoch, "Stoploss": stoploss},)
+                    # self.entryOrder(dataCE, callSym, lotSize*i, "SELL", {"Expiry": expiryEpoch, "Stoploss": CE_stoploss},)
                     
                     prmtb = self.OptChain(lastIndexTimeData[1], "PE", df.at[lastIndexTimeData[1], "c"], baseSym)
                     self.strategyLogger.info(f"Premium List: {prmtb}")
@@ -350,11 +350,17 @@ class algoLogic(optOverNightAlgoLogic):
                         self.strategyLogger.info(e)
 
                     dataPE = data["c"]
-                    stoploss = 2 * data["c"]
+                    PE_stoploss = 2 * data["c"]
+
+                    if (dataCE <= 0.5) or (dataPE <= 0.5):
+                        self.strategyLogger.info("Data for CE or PE is Less than 0.5 skipping entry.")
+                        continue
                     
                     strangle = dataCE + dataPE
 
-                    self.entryOrder(data["c"], putSym, lotSize*i, "SELL", {"Expiry": expiryEpoch, "Stoploss": stoploss},)
+                    self.entryOrder(dataCE, callSym, lotSize*i, "SELL", {"Expiry": expiryEpoch, "Stoploss": CE_stoploss},)
+
+                    self.entryOrder(dataPE, putSym, lotSize*i, "SELL", {"Expiry": expiryEpoch, "Stoploss": PE_stoploss},)
                     i_CanChange = True
 
 

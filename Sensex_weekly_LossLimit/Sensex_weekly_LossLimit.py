@@ -216,7 +216,7 @@ class algoLogic(optOverNightAlgoLogic):
                 pnnl_sum = sum(pnnl) 
                 self.strategyLogger.info(f"pnl_sum:{open_sum + pnnl_sum}")
 
-                if (open_sum + pnnl_sum) <= -30000:
+                if (open_sum + pnnl_sum) <= -7000:
                     for index, row in self.openPnl.iterrows():
                         self.exitOrder(index, "MaxLoss")
                         EntryAllowed = False
@@ -231,11 +231,11 @@ class algoLogic(optOverNightAlgoLogic):
                     if row["CurrentPrice"] >= row["Stoploss"]:
                         Stranggle_Exit = True
                         if i_CanChange:
-                            if i < 6:
+                            if i < 5:
                                 i += 1
                                 self.strategyLogger.info(f"i value increased to {i}")
                             else:
-                                i = 6
+                                i = 5
                                 self.strategyLogger.info(f"i value remains {i}")
                             i_CanChange = False
 
@@ -248,7 +248,7 @@ class algoLogic(optOverNightAlgoLogic):
                     symSide = symSide[len(symSide) - 2:]      
 
 
-                    if Current_strangle_value >= 1.4 * strangle:
+                    if Current_strangle_value >= 1.5 * strangle:
                         exitType = "Combined Loss Exit"
                         pnl = row["Pnl"] 
                         pnnl.append(pnl)
@@ -265,18 +265,18 @@ class algoLogic(optOverNightAlgoLogic):
                             i_CanChange = False
 
 
-                    elif Current_strangle_value <= 0.6 * strangle:
+                    elif Current_strangle_value <= 0.4 * strangle:
                         exitType = "Combined Profit Exit"
                         pnl = row["Pnl"] 
                         pnnl.append(pnl)
                         self.exitOrder(index, exitType)
                         self.strategyLogger.info(f"Current_strangle_value:{Current_strangle_value}")
                         if i_CanChange:
-                            if i < 6:
+                            if i < 5:
                                 i += 1
                                 self.strategyLogger.info(f"i value increased to {i}")
                             else:
-                                i= 6
+                                i= 5
                                 self.strategyLogger.info(f"i value remanins {i}")
 
                             i_CanChange = False

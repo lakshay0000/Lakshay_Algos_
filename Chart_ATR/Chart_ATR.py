@@ -197,7 +197,7 @@ class algoLogic(optOverNightAlgoLogic):
         try:
             # Fetch historical data for backtesting
             df = getFnoBacktestData(indexSym, startEpoch, endEpoch, "1Min", conn=conn)
-            df_1d = getFnoBacktestData(indexSym, startEpoch-(86400*50), endEpoch, "1D", conn=conn)
+            # df_1d = getFnoBacktestData(indexSym, startEpoch-(86400*50), endEpoch, "1D", conn=conn)
         except Exception as e:
             # Log an exception if data retrieval fails
             self.strategyLogger.info(
@@ -206,28 +206,29 @@ class algoLogic(optOverNightAlgoLogic):
 
         # Drop rows with missing values
         df.dropna(inplace=True)
-        df_1d.dropna(inplace=True)
+        # df_1d.dropna(inplace=True)
 
-        df_1d['ATR'] = df_1d['h'] - df_1d['l']
-        df_1d['ATR%'] = (df_1d['ATR']/df_1d['o']) * 100
-        df_1d['N_ATR%'] = df_1d['ATR%']
-        df_1d.loc[df_1d['c'] < df_1d['o'], 'N_ATR%'] = -df_1d.loc[df_1d['c'] < df_1d['o'], 'ATR%']  
-        mean_atr_percent = df_1d['N_ATR%'].mean()
-        df_1d['ATR%mean'] = mean_atr_percent
+        # df_1d['ATR'] = df_1d['h'] - df_1d['l']
+        # df_1d['ATR%'] = (df_1d['ATR']/df_1d['o']) * 100
+        # df_1d['N_ATR%'] = df_1d['ATR%']
+        # df_1d.loc[df_1d['c'] < df_1d['o'], 'N_ATR%'] = -df_1d.loc[df_1d['c'] < df_1d['o'], 'ATR%']  
+        # mean_atr_percent = df_1d['N_ATR%'].mean()
+        # df_1d['ATR%mean'] = mean_atr_percent
 
-        mean_neg_n_atr_percent = df_1d.loc[df_1d['N_ATR%'] < 0, 'N_ATR%'].mean()
-        mean_pos_n_atr_percent = df_1d.loc[df_1d['N_ATR%'] > 0, 'N_ATR%'].mean()
+        # mean_neg_n_atr_percent = df_1d.loc[df_1d['N_ATR%'] < 0, 'N_ATR%'].mean()
+        # mean_pos_n_atr_percent = df_1d.loc[df_1d['N_ATR%'] > 0, 'N_ATR%'].mean()
 
-        df_1d['N_ATR%_mean_neg'] = mean_neg_n_atr_percent
-        df_1d['N_ATR%_mean_pos'] = mean_pos_n_atr_percent
+        # df_1d['N_ATR%_mean_neg'] = mean_neg_n_atr_percent
+        # df_1d['N_ATR%_mean_pos'] = mean_pos_n_atr_percent
 
-        df_1d = df_1d[df_1d.index >= startEpoch]
 
         df.to_csv(
                 f"{self.fileDir['backtestResultsCandleData']}{indexSym}_1Min.csv")
-        df_1d.to_csv(
-                f"{self.fileDir['backtestResultsCandleData']}{indexSym}_1d.csv"
-            ) 
+        # df_1d.to_csv(
+        #         f"{self.fileDir['backtestResultsCandleData']}{indexSym}_1d.csv"
+        #     ) 
+
+        
 
 
         stock_1min_data = {}
@@ -246,6 +247,10 @@ class algoLogic(optOverNightAlgoLogic):
                 self.strategyLogger.info(
                     f"Data not found for {baseSym} in range {startDate} to {endDate}")
                 raise Exception(e)
+            
+            if df_1min is None or df_1d is None:
+                self.strategyLogger.info(f"No data for {stock} in 1Min or 1D timeframe.")
+                continue
 
             # Drop rows with missing values
             df_1min.dropna(inplace=True)
@@ -265,7 +270,9 @@ class algoLogic(optOverNightAlgoLogic):
             df_1d['N_ATR%'] = df_1d['ATR%']
             df_1d.loc[df_1d['c'] < df_1d['o'], 'N_ATR%'] = -df_1d.loc[df_1d['c'] < df_1d['o'], 'ATR%']  
             mean_atr_percent = df_1d['N_ATR%'].mean()
+            abs_mean_atr_percent = df_1d['ATR%'].mean()
             df_1d['ATR%mean'] = mean_atr_percent
+            df_1d['Abs_ATR%mean'] = abs_mean_atr_percent
 
             mean_neg_n_atr_percent = df_1d.loc[df_1d['N_ATR%'] < 0, 'N_ATR%'].mean()
             mean_pos_n_atr_percent = df_1d.loc[df_1d['N_ATR%'] > 0, 'N_ATR%'].mean()
@@ -275,10 +282,13 @@ class algoLogic(optOverNightAlgoLogic):
 
             analysis_data.append({
                 'stockname': stock,
+                'abs_mean_atr_percent': abs_mean_atr_percent,
                 'mean_atr_percent': mean_atr_percent,
                 'mean_neg_n_atr_percent': mean_neg_n_atr_percent,
                 'mean_pos_n_atr_percent': mean_pos_n_atr_percent
             })
+
+            
             # df_1d['std'] = df_1d['SMA_10'].rolling(window=10).std()
 
             # Add 33360 to the index to match the timestamp
@@ -324,13 +334,16 @@ class algoLogic(optOverNightAlgoLogic):
                 f"{self.fileDir['backtestResultsCandleData']}{stock}_1d.csv"
             )
 
+        # Sort analysis_data by abs_mean_atr_percent in descending order
+        analysis_data = sorted(analysis_data, key=lambda x: x['abs_mean_atr_percent'], reverse=True)
+
         # After the for loop:
         df_analysis = pd.DataFrame(analysis_data)
-        df_analysis.to_csv("stock_analysis.csv", index=False)
+        df_analysis.to_csv("stock_analysis_JAN_JUNE.csv", index=False)
         
 
 
-        lastIndexTimeData = [0, 0]
+        lastIndexTimeData = [0, 0] 
 
         # Currentexpiry = getExpiryData(startEpoch, baseSym)['CurrentExpiry']
         # expiryDatetime = datetime.strptime(Currentexpiry, "%d%b%y").replace(hour=15, minute=20)
@@ -652,7 +665,7 @@ if __name__ == "__main__":
 
     # Define Start date and End date
     startDate = datetime(2025, 1, 1, 9, 15)
-    endDate = datetime(2025, 8, 30, 15, 30)
+    endDate = datetime(2025, 6, 30, 15, 30)
 
     # Create algoLogic object
     algo = algoLogic(devName, strategyName, version)

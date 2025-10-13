@@ -298,15 +298,15 @@ if __name__ == "__main__":
     version = "v1"
 
     # Define Start date and End date
-    startDate = datetime(2025, 6, 2, 9, 15)
+    startDate = datetime(2020, 1, 1, 9, 15)
     endDate = datetime(2025, 8, 30, 15, 30)
 
     # Create algoLogic object
     algo = algoLogic(devName, strategyName, version)
 
     # Define Index Name
-    baseSym = "MARUTI"
-    indexName = "MARUTI"
+    baseSym = "HDFCBANK"
+    indexName = "HDFCBANK"
 
     # Execute the algorithm
     closedPnl, fileDir = algo.run(startDate, endDate, baseSym, indexName)
