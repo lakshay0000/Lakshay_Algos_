@@ -13,6 +13,51 @@ from backtestTools.histData import getEquityBacktestData, getEquityHistData, con
 # Define a class algoLogic that inherits from optOverNightAlgoLogic
 class algoLogic(optOverNightAlgoLogic):
 
+    def fetchAndCacheFnoHistData(self, symbol, timestamp, maxCacheSize=100, conn=None):
+        """
+        Fetches and caches historical data for a given F&O symbol and timestamp.
+
+        Parameters:
+            symbol (str): The F&O symbol for which data needs to be fetched.
+
+            timestamp (float): The timestamp for the data request.
+
+            maxCacheSize (int, optional): Maximum size of the cache. Default is 50.
+
+        Returns:
+            DataFrame: Historical data for the specified F&O symbol and timestamp.
+
+        """
+        # print(len(self.symbolDataCache))
+        if len(self.symbolDataCache) > maxCacheSize:
+            symbolToDelete = []
+            for sym in self.symbolDataCache.keys():
+                idx = next(i for i, char in enumerate(
+                    sym) if char.isdigit())
+                optionExpiry = (datetime.strptime(
+                    sym[idx:idx + 7], "%d%b%y").timestamp() + 55800)
+
+                if self.timeData > optionExpiry:
+                    symbolToDelete.append(sym)
+                    # del self.symbolDataCache[symbol]
+
+            if symbolToDelete:
+                for sym in symbolToDelete:
+                    del self.symbolDataCache[sym]
+
+        if symbol in self.symbolDataCache.keys():
+            return self.symbolDataCache[symbol].loc[timestamp]
+
+        else:
+            idx = next(i for i, char in enumerate(symbol) if char.isdigit())
+            optionExpiry = (datetime.strptime(
+                symbol[idx:idx + 7], "%d%b%y").timestamp() + 55800)
+
+            self.symbolDataCache[symbol] = getEquityBacktestData(
+                symbol, timestamp, optionExpiry, "1Min", conn)
+
+            return self.symbolDataCache[symbol].loc[timestamp]
+
     # Define a method to execute the algorithm
     def run(self, startDate, endDate, baseSym, indexSym):
         
@@ -172,7 +217,7 @@ class algoLogic(optOverNightAlgoLogic):
             if not self.openPnl.empty:
                 for index, row in self.openPnl.iterrows():
                     try:
-                        data = getEquityHistData(
+                        data = self.fetchAndCacheFnoHistData(
                             row["Symbol"], lastIndexTimeData[1], conn=conn)
                         self.openPnl.at[index, "CurrentPrice"] = data["c"]
                     except Exception as e:
@@ -308,7 +353,7 @@ class algoLogic(optOverNightAlgoLogic):
                                 self.timeData, baseSym, df.at[lastIndexTimeData[1], "c"],expiry= Currentexpiry,strikeDist= StrikeDist, conn=conn)
 
                             try:
-                                data = getEquityHistData(
+                                data = self.fetchAndCacheFnoHistData(
                                     putSym, lastIndexTimeData[1], conn=conn)
                             except Exception as e:
                                 self.strategyLogger.info(e)
@@ -324,7 +369,7 @@ class algoLogic(optOverNightAlgoLogic):
                                 self.timeData, baseSym, df.at[lastIndexTimeData[1], "c"],expiry= Currentexpiry,strikeDist= StrikeDist, conn=conn)
 
                             try:
-                                data = getEquityHistData(
+                                data = self.fetchAndCacheFnoHistData(
                                     putSym, lastIndexTimeData[1], conn=conn)
                             except Exception as e:
                                 self.strategyLogger.info(e)
@@ -357,7 +402,7 @@ class algoLogic(optOverNightAlgoLogic):
                             
 
                             try:
-                                data = getEquityHistData(
+                                data = self.fetchAndCacheFnoHistData(
                                     callSym, lastIndexTimeData[1], conn=conn)
                             except Exception as e:
                                 self.strategyLogger.info(e)
@@ -373,7 +418,7 @@ class algoLogic(optOverNightAlgoLogic):
                                 self.timeData, baseSym, df.at[lastIndexTimeData[1], "c"],expiry= Currentexpiry,strikeDist= StrikeDist, conn=conn)
 
                             try:
-                                data = getEquityHistData(
+                                data = self.fetchAndCacheFnoHistData(
                                     callSym, lastIndexTimeData[1], conn=conn)
                             except Exception as e:
                                 self.strategyLogger.info(e)
@@ -401,7 +446,7 @@ class algoLogic(optOverNightAlgoLogic):
 
 
                         try:
-                            data = getEquityHistData(
+                            data = self.fetchAndCacheFnoHistData(
                                 callSym, lastIndexTimeData[1], conn=conn)
                         except Exception as e:
                             self.strategyLogger.info(e)
@@ -422,7 +467,7 @@ class algoLogic(optOverNightAlgoLogic):
                         self.strategyLogger.info(f"{self.humanTime}\tputSym: {putSym}")
 
                         try:
-                            data = getEquityHistData(
+                            data = self.fetchAndCacheFnoHistData(
                                 putSym, lastIndexTimeData[1], conn=conn)
                         except Exception as e:
                             self.strategyLogger.info(e)
@@ -446,7 +491,7 @@ class algoLogic(optOverNightAlgoLogic):
                             self.timeData, baseSym, df_15min.at[last15MinIndexTimeData[1], "c"],expiry= Currentexpiry,strikeDist= StrikeDist, conn=conn)
 
                         try:
-                            data = getEquityHistData(
+                            data = self.fetchAndCacheFnoHistData(
                                 putSym, lastIndexTimeData[1], conn=conn)
                         except Exception as e:
                             self.strategyLogger.info(e)
@@ -466,7 +511,7 @@ class algoLogic(optOverNightAlgoLogic):
                             self.timeData, baseSym, df_15min.at[last15MinIndexTimeData[1], "c"],expiry= Currentexpiry,strikeDist= StrikeDist, conn=conn)
 
                         try:
-                            data = getEquityHistData(
+                            data = self.fetchAndCacheFnoHistData(
                                 callSym, lastIndexTimeData[1], conn=conn)
                         except Exception as e:
                             self.strategyLogger.info(e)
@@ -511,8 +556,8 @@ if __name__ == "__main__":
     algo = algoLogic(devName, strategyName, version)
 
     # Define Index Name
-    baseSym = "SBIN"
-    indexName = "SBIN"
+    baseSym = "ICICIBANK"
+    indexName = "ICICIBANK"
 
     # Execute the algorithm
     closedPnl, fileDir = algo.run(startDate, endDate, baseSym, indexName)

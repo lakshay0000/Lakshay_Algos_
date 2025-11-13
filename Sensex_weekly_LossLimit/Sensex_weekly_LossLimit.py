@@ -216,7 +216,7 @@ class algoLogic(optOverNightAlgoLogic):
                 pnnl_sum = sum(pnnl) 
                 self.strategyLogger.info(f"pnl_sum:{open_sum + pnnl_sum}")
 
-                if (open_sum + pnnl_sum) <= -7000:
+                if (open_sum + pnnl_sum) <= -15000:
                     for index, row in self.openPnl.iterrows():
                         self.exitOrder(index, "MaxLoss")
                         EntryAllowed = False
@@ -376,7 +376,7 @@ if __name__ == "__main__":
 
     # Define Start date and End date
     startDate = datetime(2024, 1, 1, 9, 15)
-    endDate = datetime(2025, 7, 31, 15, 30)
+    endDate = datetime(2025, 10, 30, 15, 30)
 
     # Create algoLogic object
     algo = algoLogic(devName, strategyName, version)

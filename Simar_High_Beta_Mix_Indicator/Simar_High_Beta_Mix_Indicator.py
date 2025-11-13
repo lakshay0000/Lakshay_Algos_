@@ -138,13 +138,26 @@ class algoLogic(optOverNightAlgoLogic):
             df_1d.dropna(inplace=True)
 
             # Calculate the 20-period EMA
-            df_1min['EMA10'] = df_1min['c'].ewm(span=10, adjust=False).mean()        
+            df_1min['EMA10'] = df_1min['c'].ewm(span=10, adjust=False).mean()  
 
-            df_1min = df_1min[df_1min.index >= startEpoch]
+            # Calculate RSI indicator
+            df_1min["rsi"] = ta.RSI(df_1min["c"], timeperiod=14)
+            df_1min.dropna(inplace=True)
+
+            df_1min['ADX'] = ta.ADX(df_1min['h'], df_1min['l'], df_1min['c'], timeperiod=14)
+
+            df_1min["ADXDown"] = np.where((df_1min["ADX"] < df_1min["ADX"].shift(1)), 1, 0)
+            df_1min["ADXUp"] = np.where((df_1min["ADX"] > df_1min["ADX"].shift(1)), 1, 0)
 
             # Determine crossover signals
             df_1min["EMADown"] = np.where((df_1min["EMA10"] < df_1min["EMA10"].shift(1)), 1, 0)
             df_1min["EMAUp"] = np.where((df_1min["EMA10"] > df_1min["EMA10"].shift(1)), 1, 0)
+
+            df_1min = df_1min[df_1min.index >= startEpoch]
+
+            # # Determine crossover signals
+            # df_1min["RtoG"] = np.where((df_1min["Supertrend"] == 1)  & (df_1min["Supertrend"].shift(1) == -1), 1, 0)
+            # df_1min["GtoR"] = np.where((df_1min["Supertrend"] == -1)  & (df_1min["Supertrend"].shift(1) == 1), 1, 0)
 
             # Add 33360 to the index to match the timestamp
             df_1d.index = df_1d.index + 33360
@@ -155,10 +168,10 @@ class algoLogic(optOverNightAlgoLogic):
             stock_1min_data[stock] = df_1min
             stock_1d_data[stock] = df_1d
 
-            if stock in analysis_dict:
-                mean_atr_percent = analysis_dict[stock]['mean_atr_percent']
-                mean_neg_n_atr_percent = analysis_dict[stock]['mean_neg_n_atr_percent']
-                mean_pos_n_atr_percent = analysis_dict[stock]['mean_pos_n_atr_percent']
+            # if stock in analysis_dict:
+            #     mean_atr_percent = analysis_dict[stock]['mean_atr_percent']
+            #     mean_neg_n_atr_percent = analysis_dict[stock]['mean_neg_n_atr_percent']
+            #     mean_pos_n_atr_percent = analysis_dict[stock]['mean_pos_n_atr_percent']
                 # Now use these values as needed for your logic
             # else:
             #     # Handle missing stock case if needed
@@ -184,6 +197,8 @@ class algoLogic(optOverNightAlgoLogic):
                 # "prev_DH": None,
                 # "prev_DL": None,
                 "stockcount": None,
+                "SELL_Main_trade": True,
+                "BUY_Main_trade": True,
                 "main_trade": True,
                 "TradeLimit": 0,
                 "high_list": [],
@@ -194,8 +209,8 @@ class algoLogic(optOverNightAlgoLogic):
                 "Trade_Stoped": False,
                 "SecondBuyTrade": False,
                 "SecondSellTrade": False,
-                "Positive_Mean": mean_pos_n_atr_percent,
-                "Negative_Mean": mean_neg_n_atr_percent,
+                "Bullish_Trend": False,
+                "Bearish_Trend": False,
                 # "Special_Buy_Trade": False,
                 # "Special_Sell_Trade": False,
                 # "Static_High": None,
@@ -275,6 +290,8 @@ class algoLogic(optOverNightAlgoLogic):
                     # state["m_upper"] = None
                     # state["m_lower"] = None
                     state["main_trade"] = True
+                    state["SELL_Main_trade"] = True
+                    state["BUY_Main_trade"] = True
                     state["TradeLimit"] = 0
                     state["high_list"] = []
                     state["low_list"] = []
@@ -287,7 +304,8 @@ class algoLogic(optOverNightAlgoLogic):
                     state["Range"] = None
                     state["SecondBuyTrade"] = False
                     state["SecondSellTrade"] = False
-                    state["Trade_Stoped"] = False
+                    state["Bullish_Trend"] = False
+                    state["Bearish_Trend"] = False
                     openEpoch = lastIndexTimeData[1]
                     self.strategyLogger.info(f"{self.humanTime} stocklist: {stock_list}")
                     # stock_merged = []
@@ -299,17 +317,17 @@ class algoLogic(optOverNightAlgoLogic):
                         prev_day = prev_day - 86400 
 
 
-                if (self.humanTime.time() > time(9, 16)) and (self.humanTime.time() <= time(9, 21)):
-                    state["high_list"].append(df_1min.at[lastIndexTimeData[1], "h"])
-                    state["low_list"].append(df_1min.at[lastIndexTimeData[1], "l"])
-                    if (self.humanTime.time() == time(9, 21)):
-                        state["High"] = max(state["high_list"])
-                        state["Low"] = min(state["low_list"])
-                        state["Range"] = state["High"]-state["Low"]
-                        if state["Range"] < 0.002 * (df_1min.at[lastIndexTimeData[1], "o"]):
-                            state["Range"] = 0.002 * (df_1min.at[lastIndexTimeData[1], "o"])
-                            self.strategyLogger.info(f"{self.humanTime} {stock} ATR Range too low, setting to 0.2% of open price: {state['Range']}")
-                        self.strategyLogger.info(f"{self.humanTime} {stock} Range: {state['Range']} High: {state['High']} Low: {state['Low']}")
+                # if (self.humanTime.time() > time(9, 16)) and (self.humanTime.time() <= time(9, 21)):
+                #     state["high_list"].append(df_1min.at[lastIndexTimeData[1], "h"])
+                #     state["low_list"].append(df_1min.at[lastIndexTimeData[1], "l"])
+                #     if (self.humanTime.time() == time(9, 21)):
+                #         state["High"] = max(state["high_list"])
+                #         state["Low"] = min(state["low_list"])
+                #         state["Range"] = state["High"]-state["Low"]
+                #         if state["Range"] < 0.002 * (df_1min.at[lastIndexTimeData[1], "o"]):
+                #             state["Range"] = 0.002 * (df_1min.at[lastIndexTimeData[1], "o"])
+                #             self.strategyLogger.info(f"{self.humanTime} {stock} ATR Range too low, setting to 0.2% of open price: {state['Range']}")
+                #         self.strategyLogger.info(f"{self.humanTime} {stock} Range: {state['Range']} High: {state['High']} Low: {state['Low']}")
 
                 # Update current price for open positions
                 if not self.openPnl.empty:
@@ -323,79 +341,6 @@ class algoLogic(optOverNightAlgoLogic):
                 self.pnlCalculator()
 
 
-
-                #Updating daily index
-                # prev_day = timeData - 86400
-                # if (self.humanTime.time() == time(9, 16)):
-                #     # Today_open = df_1min.at[lastIndexTimeData[1], 'o']
-                #     # state["Today_high"] = df_1min.at[lastIndexTimeData[1], 'h']
-                #     # state["Today_low"]  = df_1min.at[lastIndexTimeData[1], 'l']
-                #     #check if previoud day exists in 1d data
-                #     while prev_day not in df_1d.index:
-                #         prev_day = prev_day - 86400
-
-                # if prev_day in df_1d.index:
-                #     state["prev_DH"] = (df_1d.at[prev_day, 'h'])
-                #     state["prev_DL"] = (df_1d.at[prev_day, 'l'])  
-                #     self.strategyLogger.info(f"{self.humanTime} Previous Day High: {state['prev_DH']}, Previous Day Low: {state['prev_DL']}, BarNo: {375 + state['i']}")
-
-                # if state["m_upper"] is None and state["m_lower"] is None:
-                #     state["m_upper"] = (state["Today_high"] - state["prev_DH"]) / (375)
-                #     state["m_lower"] = (state["Today_low"]  - state["prev_DL"]) / (375)
-                #     self.strategyLogger.info(f"{self.humanTime} Slope Upper: {state['m_upper']}, Slope Lower: {state['m_lower']}")  
-
-                # if lastIndexTimeData[1] in df_1min.index:
-                #     BarNo = 375 + state["i"]+ state["k"]
-                #     upper_ray = state["prev_DH"] + (state["m_upper"] * BarNo)
-                #     lower_ray = state["prev_DL"] + (state["m_lower"] * BarNo) 
-                #     state["i"] = state["i"]+ 1
-                #     self.strategyLogger.info(f"{self.humanTime} Upper Ray: {upper_ray}, Lower Ray: {lower_ray}, BarNo: {BarNo}")
-                #     state["high_list"].append(df_1min.at[lastIndexTimeData[1], "h"])
-                #     state["low_list"].append(df_1min.at[lastIndexTimeData[1], "l"])
-                #     state["high_list_Interval"].append(df_1min.at[lastIndexTimeData[1], "h"])
-                #     state["low_list_Interval"].append(df_1min.at[lastIndexTimeData[1], "l"])
-
-                # if upper_ray < lower_ray:
-                #     temp = upper_ray
-                #     a = lower_ray
-                #     lower_ray = temp
-
-                # if state["i"]== 60:
-                #     state["m_upper"] = None
-                #     state["m_lower"] = None
-                #     state["i"]= 0
-                #     state["k"] = state["k"] + 60
-
-                #     state["max_list"].append(max(state["high_list_Interval"]))
-                #     state["min_list"].append(min(state["low_list_Interval"]))
-
-                #     if len(state["max_list"]) < 3:
-
-                #         state["Today_high"] = max(state["high_list"])
-                #         high_index = state["high_list"].index(state["Today_high"])
-                #         state["Today_low"]  = min(state["low_list"])
-                #         low_index = state["low_list"].index(state["Today_low"] )
-
-                #     else:
-                #         # Consider last two max values for Today_high
-                #         last_two_max = state["max_list"][-2:]
-                #         state["Today_high"] = max(last_two_max)
-                #         high_index = len(state["high_list"]) - 1 - state["high_list"][::-1].index(state["Today_high"])
-
-                #         # Consider last two min values for Today_low
-                #         last_two_min = state["min_list"][-2:]
-                #         state["Today_low"] = min(last_two_min)
-                #         low_index = len(state["low_list"]) - 1 - state["low_list"][::-1].index(state["Today_low"])
-
-                    
-                #     state["high_list_Interval"] = []
-                #     state["low_list_Interval"] = [] 
-
-                #     state["m_upper"] = (state["Today_high"] - state["prev_DH"]) / (375+high_index)
-                #     state["m_lower"] = (state["Today_low"]  - state["prev_DL"]) / (375+low_index)
-
-                #     self.strategyLogger.info(f"{self.humanTime} 1 Hour Completed. High List: {state['Today_high']}, Low List: {state['Today_low']}, stock: {stock}")
-                #     self.strategyLogger.info(f"{self.humanTime} New Slope Upper: {state['m_upper']}, New Slope Lower: {state['m_lower']}")
                 
 
                 # Check for exit conditions and execute exit orders
@@ -414,9 +359,13 @@ class algoLogic(optOverNightAlgoLogic):
                         elif symSide == stock:
                             if (row["PositionStatus"]==1):
 
-                                if (df_1min.at[lastIndexTimeData[1], 'c'] < state["High"]) and (df_1min.at[lastIndexTimeData[1], 'EMA10'] < state["High"]):
-                                    exitType = "Stoploss Lower Range Hit"
-                                    self.exitOrder(index, exitType)
+                                if df_1min.at[lastIndexTimeData[1], "rsi"] < 40 and df_1min.at[lastIndexTimeData[1], 'EMADown'] == 1: 
+                                    if row["CurrentPrice"] > row["EntryPrice"]:
+                                        exitType = "Buy_Exit_Signal"
+                                        self.exitOrder(index, exitType)
+                                    elif df_1min.at[lastIndexTimeData[1], "rsi"] < 30:
+                                        exitType = "Buy_Exit_Signal"
+                                        self.exitOrder(index, exitType)
 
 
                                 # elif row["CurrentPrice"] >= row["Target"]:
@@ -426,9 +375,13 @@ class algoLogic(optOverNightAlgoLogic):
 
                             elif (row["PositionStatus"]==-1):
 
-                                if (df_1min.at[lastIndexTimeData[1], 'c'] > state["Low"]) and (df_1min.at[lastIndexTimeData[1], 'EMA10'] > state["Low"]):  
-                                    exitType = "Stoploss Upper Range Hit"
-                                    self.exitOrder(index, exitType)
+                                if df_1min.at[lastIndexTimeData[1], "rsi"] > 60 and df_1min.at[lastIndexTimeData[1], 'EMAUp'] == 1:  
+                                    if row["CurrentPrice"] < row["EntryPrice"]:
+                                        exitType = "Sell_Exit_Signal"
+                                        self.exitOrder(index, exitType)
+                                    elif df_1min.at[lastIndexTimeData[1], "rsi"] > 70:
+                                        exitType = "Sell_Exit_Signal"
+                                        self.exitOrder(index, exitType)
 
 
                                 # elif row["CurrentPrice"] <= row["Target"]:
@@ -469,8 +422,8 @@ class algoLogic(optOverNightAlgoLogic):
 
 
                 # Refresh stock list at 15:20
-                if (self.humanTime.time() < time(9, 21)):
-                    continue
+                # if (self.humanTime.time() < time(9, 21)):
+                #     continue
 
 
                 # if (self.humanTime.time() == time(15, 20)) and New_iteration:
@@ -485,70 +438,20 @@ class algoLogic(optOverNightAlgoLogic):
                 if ((timeData-60) in df_1min.index) and (self.humanTime.time() < time(15, 20)):
 
                     if state["stockcount"] ==0:
-                        if (df_1min.at[lastIndexTimeData[1], 'c'] < state["Low"]) and (df_1min.at[lastIndexTimeData[1], 'EMA10'] < state["Low"]):
+                        if df_1min.at[lastIndexTimeData[1], "rsi"] < 40 and df_1min.at[lastIndexTimeData[1], 'ADXUp'] == 1 and df_1min.at[lastIndexTimeData[1], 'EMADown'] == 1:
 
                             entry_price = df_1min.at[lastIndexTimeData[1], "c"]
-                            buffer= (state["Low"] - entry_price) + state["Range"]
-                            target= df_1d.at[prev_day, "h"] + (state["Negative_Mean"]/100 * df_1d.at[prev_day, "h"])
-                            Mean = state["Negative_Mean"]/4
-                            if target > (entry_price+((Mean/100)*entry_price)):
-                                target = entry_price+((Mean/100)*entry_price)
-
-                            self.strategyLogger.info(f"{self.humanTime} {stock} target: {target}, Negative_Mean: {state['Negative_Mean']}, prev_day_high: {df_1d.at[prev_day, 'h']}")
                             # stoploss = entry_price + (buffer/2)
 
-                            self.entryOrder(entry_price, stock, (amountPerTrade//entry_price), "SELL", {"Target": target})
+                            self.entryOrder(entry_price, stock, (amountPerTrade//entry_price), "SELL")
 
+                        
 
-                        if (df_1min.at[lastIndexTimeData[1], 'c'] > state["High"]) and (df_1min.at[lastIndexTimeData[1], 'EMA10'] > state["High"]):    
+                        if df_1min.at[lastIndexTimeData[1], "rsi"] > 60 and df_1min.at[lastIndexTimeData[1], 'ADXUp'] == 1 and df_1min.at[lastIndexTimeData[1], 'EMAUp'] == 1:   
 
                             entry_price = df_1min.at[lastIndexTimeData[1], "c"]
-                            buffer = (entry_price - state["High"]) + state["Range"]
-                            target = df_1d.at[prev_day, "l"] + (state["Positive_Mean"]/100 * df_1d.at[prev_day, "l"])
-                            Mean = state["Positive_Mean"]/4
-                            if target < (entry_price+((Mean/100)*entry_price)):
-                                target = entry_price+((Mean/100)*entry_price)
 
-                            self.strategyLogger.info(f"{self.humanTime} {stock} target: {target}, Positive_Mean: {state['Positive_Mean']}, prev_day_low: {df_1d.at[prev_day, 'l']}")
-                            # stoploss = entry_price - (buffer/2)
-
-                            self.entryOrder(entry_price, stock, (amountPerTrade//entry_price), "BUY", {"Target": target})
-
-
-                    # if state["SecondSellTrade"] and (state["TradeLimit"]<3):
-                    #     if (df_1min.at[lastIndexTimeData[1], 'c'] < state["Low"]) and (df_1min.at[lastIndexTimeData[1], 'EMA10'] < state["Low"]):
-
-                    #         entry_price = df_1min.at[lastIndexTimeData[1], "c"]
-                    #         buffer= (state["Low"] - entry_price) + state["Range"]
-                    #         target= df_1d.at[prev_day, "h"] + (state["Negative_Mean"]/100 * df_1d.at[prev_day, "h"])
-                    #         Mean = state["Negative_Mean"]/4
-                    #         if target > (entry_price+((Mean/100)*entry_price)):
-                    #             target = entry_price+((Mean/100)*entry_price)
-
-                    #         self.strategyLogger.info(f"{self.humanTime} {stock} target: {target}, Negative_Mean: {state['Negative_Mean']}, prev_day_high: {df_1d.at[prev_day, 'h']}")
-                    #         # stoploss = entry_price + (buffer/2)
-
-                    #         self.entryOrder(entry_price, stock, (amountPerTrade//entry_price), "SELL", {"Target": target})
-                    #         state["SecondSellTrade"] = False
-                    #         state["TradeLimit"] = state["TradeLimit"]+1
-
-
-                    # if state["SecondBuyTrade"] and (state["TradeLimit"]<3):
-                    #     if (df_1min.at[lastIndexTimeData[1], 'c'] > state["High"]) and (df_1min.at[lastIndexTimeData[1], 'EMA10'] > state["High"]):
-
-                    #         entry_price = df_1min.at[lastIndexTimeData[1], "c"]
-                    #         buffer = (entry_price - state["High"]) + state["Range"]
-                    #         target = df_1d.at[prev_day, "l"] + (state["Positive_Mean"]/100 * df_1d.at[prev_day, "l"])
-                    #         Mean = state["Positive_Mean"]/4
-                    #         if target < (entry_price+((Mean/100)*entry_price)):
-                    #             target = entry_price+((Mean/100)*entry_price)
-
-                    #         self.strategyLogger.info(f"{self.humanTime} {stock} target: {target}, Positive_Mean: {state['Positive_Mean']}, prev_day_low: {df_1d.at[prev_day, 'l']}")
-                    #         # stoploss = entry_price - (buffer/2)   Low
-
-                    #         self.entryOrder(entry_price, stock, (amountPerTrade//entry_price), "BUY", {"Target": target})
-                    #         state["SecondBuyTrade"] = False
-                    #         state["TradeLimit"] = state["TradeLimit"]+1
+                            self.entryOrder(entry_price, stock, (amountPerTrade//entry_price), "BUY")
 
 
 

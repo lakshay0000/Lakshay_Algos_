@@ -95,7 +95,7 @@ class algoLogic(optOverNightAlgoLogic):
     def run(self, startDate, endDate, baseSym, indexSym):
 
         # Add necessary columns to the DataFrame
-        col = ["Target", "Stoploss", "Expiry"]
+        col = ["Target", "Stoploss", "Expiry", "TradeType"]
         self.addColumnsToOpenPnlDf(col)
 
         # Convert start and end dates to timestamps
@@ -245,50 +245,85 @@ class algoLogic(optOverNightAlgoLogic):
                 for index, row in self.openPnl.iterrows():
 
                     symSide = row["Symbol"]
-                    symSide = symSide[len(symSide) - 2:]      
+                    symSide = symSide[len(symSide) - 2:]   
 
-
-                    if Current_strangle_value >= 1.5 * strangle:
-                        exitType = "Combined Loss Exit"
-                        pnl = row["Pnl"] 
-                        pnnl.append(pnl)
-                        self.exitOrder(index, exitType)
-                        self.strategyLogger.info(f"Current_strangle_value:{Current_strangle_value}")
-                        if i_CanChange:
-                            if i > 1:
-                                i = i - 1
-                                self.strategyLogger.info(f"i value decreased to {i}")
-                            else:
-                                i = 1
-                                self.strategyLogger.info(f"i value remanins {i}")
-
-                            i_CanChange = False
-
-
-                    elif Current_strangle_value <= 0.4 * strangle:
-                        exitType = "Combined Profit Exit"
-                        pnl = row["Pnl"] 
-                        pnnl.append(pnl)
-                        self.exitOrder(index, exitType)
-                        self.strategyLogger.info(f"Current_strangle_value:{Current_strangle_value}")
-                        if i_CanChange:
-                            if i < 5:
-                                i += 1
-                                self.strategyLogger.info(f"i value increased to {i}")
-                            else:
-                                i= 5
-                                self.strategyLogger.info(f"i value remanins {i}")
-
-                            i_CanChange = False
-                        
-
-                    elif self.humanTime.time() >= time(15, 20):
+                    if self.humanTime.time() >= time(15, 20):
                         exitType = "Time Up"
                         self.exitOrder(index, exitType)
                         i = 3
                         i_CanChange = False
                         pnnl = []
-                        self.strategyLogger.info(f"i value reset to {i}")
+                        self.strategyLogger.info(f"i value reset to {i}")   
+                        
+
+                    elif row["TradeType"] == "Small Premium":
+                        if Current_strangle_value >= 2 * strangle:
+                            exitType = "Combined Loss Exit"
+                            pnl = row["Pnl"] 
+                            pnnl.append(pnl)
+                            self.exitOrder(index, exitType)
+                            self.strategyLogger.info(f"Current_strangle_value:{Current_strangle_value}")
+                            if i_CanChange:
+                                if i > 1:
+                                    i = i - 1
+                                    self.strategyLogger.info(f"i value decreased to {i}")
+                                else:
+                                    i = 1
+                                    self.strategyLogger.info(f"i value remanins {i}")
+
+                                i_CanChange = False
+
+
+                        elif Current_strangle_value <= 0.1 * strangle:
+                            exitType = "Combined Profit Exit"
+                            pnl = row["Pnl"] 
+                            pnnl.append(pnl)
+                            self.exitOrder(index, exitType)
+                            self.strategyLogger.info(f"Current_strangle_value:{Current_strangle_value}")
+                            if i_CanChange:
+                                if i < 5:
+                                    i += 1
+                                    self.strategyLogger.info(f"i value increased to {i}")
+                                else:
+                                    i= 5
+                                    self.strategyLogger.info(f"i value remanins {i}")
+
+                                i_CanChange = False
+                    
+                    elif row["TradeType"] == "Regular Premium":
+                        if Current_strangle_value >= 1.5 * strangle:
+                            exitType = "Combined Loss Exit"
+                            pnl = row["Pnl"] 
+                            pnnl.append(pnl)
+                            self.exitOrder(index, exitType)
+                            self.strategyLogger.info(f"Current_strangle_value:{Current_strangle_value}")
+                            if i_CanChange:
+                                if i > 1:
+                                    i = i - 1
+                                    self.strategyLogger.info(f"i value decreased to {i}")
+                                else:
+                                    i = 1
+                                    self.strategyLogger.info(f"i value remanins {i}")
+
+                                i_CanChange = False
+
+
+                        elif Current_strangle_value <= 0.4 * strangle:
+                            exitType = "Combined Profit Exit"
+                            pnl = row["Pnl"] 
+                            pnnl.append(pnl)
+                            self.exitOrder(index, exitType)
+                            self.strategyLogger.info(f"Current_strangle_value:{Current_strangle_value}")
+                            if i_CanChange:
+                                if i < 5:
+                                    i += 1
+                                    self.strategyLogger.info(f"i value increased to {i}")
+                                else:
+                                    i= 5
+                                    self.strategyLogger.info(f"i value remanins {i}")
+
+                                i_CanChange = False
+
 
 
             if Stranggle_Exit == True:
@@ -352,15 +387,18 @@ class algoLogic(optOverNightAlgoLogic):
                     dataPE = data["c"]
                     PE_stoploss = 2 * data["c"]
 
-                    if (dataCE <= 0.5) or (dataPE <= 0.5):
-                        self.strategyLogger.info("Data for CE or PE is Less than 0.5 skipping entry.")
-                        continue
-                    
+                    TradeType= "Regular Premium"
+
+                    if (dataCE+dataPE <= 1):
+                        TradeType = "Small Premium"
+                        self.strategyLogger.info("Premium less than or equal to 1")
+                        
                     strangle = dataCE + dataPE
 
-                    self.entryOrder(dataCE, callSym, lotSize*i, "SELL", {"Expiry": expiryEpoch, "Stoploss": CE_stoploss},)
 
-                    self.entryOrder(dataPE, putSym, lotSize*i, "SELL", {"Expiry": expiryEpoch, "Stoploss": PE_stoploss},)
+                    self.entryOrder(dataCE, callSym, lotSize*i, "SELL", {"Expiry": expiryEpoch, "Stoploss": CE_stoploss, "TradeType": TradeType},)
+
+                    self.entryOrder(dataPE, putSym, lotSize*i, "SELL", {"Expiry": expiryEpoch, "Stoploss": PE_stoploss, "TradeType": TradeType},)
                     i_CanChange = True
 
 

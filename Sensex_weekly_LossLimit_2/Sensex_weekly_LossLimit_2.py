@@ -216,7 +216,7 @@ class algoLogic(optOverNightAlgoLogic):
                 pnnl_sum = sum(pnnl) 
                 self.strategyLogger.info(f"pnl_sum:{open_sum + pnnl_sum}")
 
-                if (open_sum + pnnl_sum) <= -6000:
+                if (open_sum + pnnl_sum) <= -10000:
                     for index, row in self.openPnl.iterrows():
                         self.exitOrder(index, "MaxLoss")
                         EntryAllowed = False
@@ -330,9 +330,9 @@ class algoLogic(optOverNightAlgoLogic):
                         self.strategyLogger.info(e)
 
                     dataCE = data["c"]
-                    stoploss = 2 * data["c"]
+                    CE_stoploss = 2 * data["c"]
 
-                    self.entryOrder(data["c"], callSym, lotSize*i, "SELL", {"Expiry": expiryEpoch, "Stoploss": stoploss},)
+                    # self.entryOrder(dataCE, callSym, lotSize*i, "SELL", {"Expiry": expiryEpoch, "Stoploss": CE_stoploss},)
                     
                     prmtb = self.OptChain(lastIndexTimeData[1], "PE", df.at[lastIndexTimeData[1], "c"], baseSym)
                     self.strategyLogger.info(f"Premium List: {prmtb}")
@@ -350,11 +350,17 @@ class algoLogic(optOverNightAlgoLogic):
                         self.strategyLogger.info(e)
 
                     dataPE = data["c"]
-                    stoploss = 2 * data["c"]
+                    PE_stoploss = 2 * data["c"]
+
+                    if (dataCE <= 2) or (dataPE <= 2):
+                        self.strategyLogger.info("Data for CE or PE is Less than 2 skipping entry.")
+                        continue
                     
                     strangle = dataCE + dataPE
 
-                    self.entryOrder(data["c"], putSym, lotSize*i, "SELL", {"Expiry": expiryEpoch, "Stoploss": stoploss},)
+                    self.entryOrder(dataCE, callSym, lotSize*i, "SELL", {"Expiry": expiryEpoch, "Stoploss": CE_stoploss},)
+
+                    self.entryOrder(dataPE, putSym, lotSize*i, "SELL", {"Expiry": expiryEpoch, "Stoploss": PE_stoploss},)
                     i_CanChange = True
 
 
@@ -375,15 +381,15 @@ if __name__ == "__main__":
     version = "v1"
 
     # Define Start date and End date
-    startDate = datetime(2025, 10, 1, 9, 15)
-    endDate = datetime(2025, 10, 31, 15, 30)
+    startDate = datetime(2024, 1, 1, 9, 15)
+    endDate = datetime(2025, 10, 30, 15, 30)
 
     # Create algoLogic object
     algo = algoLogic(devName, strategyName, version)
 
     # Define Index Name
-    baseSym = "NIFTY"
-    indexName = "NIFTY 50"
+    baseSym = "SENSEX"
+    indexName = "SENSEX"
 
     # Execute the algorithm
     closedPnl, fileDir = algo.run(startDate, endDate, baseSym, indexName)
