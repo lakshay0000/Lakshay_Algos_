@@ -155,7 +155,7 @@ class algoLogic(baseAlgoLogic):
                 continue
 
             if lastIndexTimeData[1] not in df.index:
-                stockAlgoLogic.strategyLogger.info(f"{stockAlgoLogic.humanTime} Data not found")
+                stockAlgoLogic.strategyLogger.info(f"{stockAlgoLogic.humanTime} Data not found stock: {stockName}")
                 continue
 
             #  # Log relevant information
@@ -263,6 +263,9 @@ class algoLogic(baseAlgoLogic):
                         if row["CurrentPrice"] < row["EntryPrice"] and df_1d.at[O_epoch, 'EMADown'] == 1:
                             exitType = "Bearish Day Loss Exit"
                             stockAlgoLogic.exitOrder(index, exitType)
+                            trailing = False
+                            SL_List.clear()
+                            New_Entry = False
 
                     elif df.at[lastIndexTimeData[1], "c"] < new_sl:
                         if row["CurrentPrice"] > row["EntryPrice"]:
