@@ -60,7 +60,7 @@ class algoLogic(baseAlgoLogic):
             # Subtracting 2592000 to subtract 90 days from startTimeEpoch
             df = getEquityBacktestData(
                 stockName, startTimeEpoch-(86400*50), endTimeEpoch, "1Min",conn=conn)
-            df_1d = getEquityBacktestData(stockName, startTimeEpoch-(86400*250), endTimeEpoch, "1D",conn=conn)
+            df_1d = getEquityBacktestData(stockName, startTimeEpoch-(86400*50), endTimeEpoch, "1D",conn=conn)
         except Exception as e:
         # Log an exception if data retrieval fails
             stockAlgoLogic.strategyLogger.info(
@@ -76,14 +76,7 @@ class algoLogic(baseAlgoLogic):
         
         # Calculate the 20-period EMA
         df['EMA10'] = df['c'].ewm(span=10, adjust=False).mean()        
-        df_1d['EMA10'] = df_1d['c'].ewm(span=10, adjust=False).mean() 
-        
-
-        # mark candles that break the previous 250-candle high (close > prior 250-high)
-        # prev250_high is the rolling max of 'h' over the previous 250 rows (excluded current)
-        df_1d['prev250_high'] = df_1d['h'].rolling(window=250, min_periods=250).max().shift(1)
-        df_1d['Break250High'] = np.where(df_1d['c'] > df_1d['prev250_high'], 1, 0)
-        df_1d['Break250High'].fillna(0, inplace=True)  
+        df_1d['EMA10'] = df_1d['c'].ewm(span=10, adjust=False).mean()   
 
         # # Determine crossover signals
         # df["EMADown"] = np.where((df["EMA10"] < df["EMA10"].shift(1)), 1, 0)
@@ -202,29 +195,23 @@ class algoLogic(baseAlgoLogic):
 
                     # symSide = row["Symbol"]
                     # symSide = symSide[len(symSide) - 2:] 
-                    if row["PositionStatus"] == 1:
-                        if stockAlgoLogic.humanTime.time() == time(15, 20):
-                            if row["CurrentPrice"] > row["EntryPrice"]:
-                                exitType = "Time Up"
-                                stockAlgoLogic.exitOrder(index, exitType)
 
-                        if Bearish_Day:
-                            if row["CurrentPrice"] < row["EntryPrice"]:
-                                exitType = "Bearish Day Loss Exit"
-                                stockAlgoLogic.exitOrder(index, exitType)
-                    
-                    elif row["PositionStatus"] == -1:
-                        if stockAlgoLogic.humanTime.time() == time(15, 20):
-                            exitType = "Time Up"
-                            stockAlgoLogic.exitOrder(index, exitType)
+                    if stockAlgoLogic.humanTime.time() >= time(15, 20):
+                        exitType = "Time Up"
+                        stockAlgoLogic.exitOrder(index, exitType)
+
+                    # if Bearish_Day:
+                    #     if row["CurrentPrice"] < row["EntryPrice"]:
+                    #         exitType = "Bearish Day Loss Exit"
+                    #         stockAlgoLogic.exitOrder(index, exitType)
 
 
 
             # tradecount = stockAlgoLogic.openPnl['Symbol'].value_counts()
             # state["stockcount"]= tradecount.get(stockName, 0)
 
-            if (stockAlgoLogic.humanTime.time() < time(9, 21)):
-                continue  
+            # if (stockAlgoLogic.humanTime.time() < time(9, 21)):
+            #     continue  
 
             # if Bullish_Day:
             #     if df.at[lastIndexTimeData[1], 'EMA10'] < Low:
@@ -242,13 +229,7 @@ class algoLogic(baseAlgoLogic):
             
             if ((timeData-60) in df.index) and stockAlgoLogic.openPnl.empty and (stockAlgoLogic.humanTime.time() < time(15, 20)):
 
-                if Bullish_Day and df.at[lastIndexTimeData[1], "c"] > High:
-
-                    entry_price = df.at[lastIndexTimeData[1], "c"]
-
-                    stockAlgoLogic.entryOrder(entry_price, stockName, (amountPerTrade//entry_price), "BUY")
-
-                if Bearish_Day and df.at[lastIndexTimeData[1], "c"] < Low:
+                if Bearish_Day:
 
                     entry_price = df.at[lastIndexTimeData[1], "c"]
 
@@ -257,10 +238,10 @@ class algoLogic(baseAlgoLogic):
 
 
         # At the end of the trading day, exit all open positions
-        if not stockAlgoLogic.openPnl.empty:
-            for index, row in stockAlgoLogic.openPnl.iterrows():
-                exitType = "Time Up Remaining"
-                stockAlgoLogic.exitOrder(index, exitType)  
+        # if not stockAlgoLogic.openPnl.empty:
+        #     for index, row in stockAlgoLogic.openPnl.iterrows():
+        #         exitType = "Time Up Remaining"
+        #         stockAlgoLogic.exitOrder(index, exitType)  
                             
 
 

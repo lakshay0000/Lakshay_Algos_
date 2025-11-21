@@ -60,7 +60,7 @@ class algoLogic(baseAlgoLogic):
             # Subtracting 2592000 to subtract 90 days from startTimeEpoch
             df = getEquityBacktestData(
                 stockName, startTimeEpoch-(86400*50), endTimeEpoch, "1Min",conn=conn)
-            df_1d = getEquityBacktestData(stockName, startTimeEpoch-(86400*250), endTimeEpoch, "1D",conn=conn)
+            df_1d = getEquityBacktestData(stockName, startTimeEpoch-(86400*50), endTimeEpoch, "1D",conn=conn)
         except Exception as e:
         # Log an exception if data retrieval fails
             stockAlgoLogic.strategyLogger.info(
@@ -76,14 +76,14 @@ class algoLogic(baseAlgoLogic):
         
         # Calculate the 20-period EMA
         df['EMA10'] = df['c'].ewm(span=10, adjust=False).mean()        
-        df_1d['EMA10'] = df_1d['c'].ewm(span=10, adjust=False).mean() 
-        
+        df_1d['EMA10'] = df_1d['c'].ewm(span=10, adjust=False).mean()   
+
 
         # mark candles that break the previous 250-candle high (close > prior 250-high)
         # prev250_high is the rolling max of 'h' over the previous 250 rows (excluded current)
         df_1d['prev250_high'] = df_1d['h'].rolling(window=250, min_periods=250).max().shift(1)
         df_1d['Break250High'] = np.where(df_1d['c'] > df_1d['prev250_high'], 1, 0)
-        df_1d['Break250High'].fillna(0, inplace=True)  
+        df_1d['Break250High'].fillna(0, inplace=True) 
 
         # # Determine crossover signals
         # df["EMADown"] = np.where((df["EMA10"] < df["EMA10"].shift(1)), 1, 0)
@@ -113,11 +113,17 @@ class algoLogic(baseAlgoLogic):
         TradeLimit = 0
         high_list = []
         low_list = []
+        low_list2 =[]
         High= None
         Low = None
         Range = None
         Bullish_Day = False
-        Bearish_Day = False
+        Bearish_Day = False 
+        trailing = False
+        new_sl = None
+        New_Entry = False
+        Prev_Day_High = None
+        High_Trailing = False
 
 
 
@@ -142,6 +148,7 @@ class algoLogic(baseAlgoLogic):
                 continue
 
             if lastIndexTimeData[1] not in df.index:
+                stockAlgoLogic.strategyLogger.info(f"{stockAlgoLogic.humanTime} {stockName} No Data.")
                 continue
 
             #  # Log relevant information
@@ -149,14 +156,32 @@ class algoLogic(baseAlgoLogic):
             #     stockAlgoLogic.strategyLogger.info(f"Datetime: {stockAlgoLogic.humanTime}\tClose: {df.at[lastIndexTimeData[1],'c']}")
 
             if (stockAlgoLogic.humanTime.time() == time(9, 16)):
+                prev_day = timeData - 86400
                 TradeLimit = 0
                 high_list = []
                 low_list = []
+                low_list2 =[]
                 High= None
                 Low = None
                 Range = None
                 Bullish_Day = False
                 Bearish_Day = False
+                High_Trailing = False
+                Prev_Day_High = None
+
+                #check if previoud day exists in 1d data
+                while prev_day not in df_1d.index:
+                    prev_day = prev_day - 86400 
+
+
+                if not stockAlgoLogic.openPnl.empty:
+                    Prev_Day_High = df_1d.at[prev_day, "h"]
+                    # else:
+                    #     new_sl = df_1d.at[prev_day, "l"]
+
+                if New_Entry == False:
+                    New_Entry = True
+
 
                 if df_1d.at[timeData, 'EMADown'] == 1:
                     Bearish_Day = True
@@ -200,23 +225,25 @@ class algoLogic(baseAlgoLogic):
             if not stockAlgoLogic.openPnl.empty:
                 for index, row in stockAlgoLogic.openPnl.iterrows():
 
-                    # symSide = row["Symbol"]
-                    # symSide = symSide[len(symSide) - 2:] 
-                    if row["PositionStatus"] == 1:
-                        if stockAlgoLogic.humanTime.time() == time(15, 20):
-                            if row["CurrentPrice"] > row["EntryPrice"]:
-                                exitType = "Time Up"
-                                stockAlgoLogic.exitOrder(index, exitType)
+                    symSide = row["Symbol"]
+                    # symSide = symSide[len(symSide) - 2:]   
 
-                        if Bearish_Day:
-                            if row["CurrentPrice"] < row["EntryPrice"]:
-                                exitType = "Bearish Day Loss Exit"
-                                stockAlgoLogic.exitOrder(index, exitType)
-                    
-                    elif row["PositionStatus"] == -1:
-                        if stockAlgoLogic.humanTime.time() == time(15, 20):
-                            exitType = "Time Up"
-                            stockAlgoLogic.exitOrder(index, exitType)
+                    if df.at[lastIndexTimeData[1], "c"] < new_sl:
+                        exitType = "SL Hit"
+                        stockAlgoLogic.exitOrder(index, exitType)
+                        New_Entry = False
+                        High_Trailing = False
+                        Prev_Day_High = None
+
+            
+            if stockAlgoLogic.openPnl.empty:
+                low_list2.append(df.at[lastIndexTimeData[1], "l"])
+
+
+            # Trailling when market tests privious days High
+            if not stockAlgoLogic.openPnl.empty and Prev_Day_High is not None:
+                if df.at[lastIndexTimeData[1], "c"] > Prev_Day_High:
+                    High_Trailing= True
 
 
 
@@ -226,33 +253,34 @@ class algoLogic(baseAlgoLogic):
             if (stockAlgoLogic.humanTime.time() < time(9, 21)):
                 continue  
 
-            # if Bullish_Day:
-            #     if df.at[lastIndexTimeData[1], 'EMA10'] < Low:
-            #         Low = df.at[lastIndexTimeData[1], 'EMA10']
-            #         High = Low + Range
-            #         stockAlgoLogic.strategyLogger.info(f"{stockAlgoLogic.humanTime} {stockName} New Low: {Low}, High: {High}")
 
-            # if Bearish_Day:
-            #     if df.at[lastIndexTimeData[1], 'EMA10'] > High:
-            #         High = df.at[lastIndexTimeData[1], 'EMA10']
-            #         Low = High - Range
-            #         stockAlgoLogic.strategyLogger.info(f"{stockAlgoLogic.humanTime} {stockName} New High: {High}, Low: {Low}")
+            if High_Trailing and not stockAlgoLogic.openPnl.empty:
+                if df.at[lastIndexTimeData[1], 'EMA10'] > High:
+                        High = df.at[lastIndexTimeData[1], 'EMA10']
+                        Low = High - Range
+                        stockAlgoLogic.strategyLogger.info(f"{stockAlgoLogic.humanTime} {stockName} New High: {High}, Low: {Low}")
+                        new_sl = Low
+            
+            if stockAlgoLogic.openPnl.empty:
+                if df.at[lastIndexTimeData[1], 'EMA10'] < Low:
+                    Low = df.at[lastIndexTimeData[1], 'EMA10']
+                    High = Low + Range
+                    stockAlgoLogic.strategyLogger.info(f"{stockAlgoLogic.humanTime} {stockName} New Low: {Low}, High: {High}")
 
 
             
             if ((timeData-60) in df.index) and stockAlgoLogic.openPnl.empty and (stockAlgoLogic.humanTime.time() < time(15, 20)):
+                if TradeLimit < 2:
 
-                if Bullish_Day and df.at[lastIndexTimeData[1], "c"] > High:
+                    if Bullish_Day and df.at[lastIndexTimeData[1], "c"] > High:
 
-                    entry_price = df.at[lastIndexTimeData[1], "c"]
+                        entry_price = df.at[lastIndexTimeData[1], "c"]
+                        new_sl = min(low_list2)
 
-                    stockAlgoLogic.entryOrder(entry_price, stockName, (amountPerTrade//entry_price), "BUY")
+                        stockAlgoLogic.entryOrder(entry_price, stockName, (amountPerTrade//entry_price), "BUY")
+                        low_list2.clear()
+                        TradeLimit= TradeLimit+1
 
-                if Bearish_Day and df.at[lastIndexTimeData[1], "c"] < Low:
-
-                    entry_price = df.at[lastIndexTimeData[1], "c"]
-
-                    stockAlgoLogic.entryOrder(entry_price, stockName, (amountPerTrade//entry_price), "SELL")
 
 
 

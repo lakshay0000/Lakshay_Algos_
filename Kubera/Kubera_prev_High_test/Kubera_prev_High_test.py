@@ -50,6 +50,8 @@ class algoLogic(optOverNightAlgoLogic):
         df_1d["EMADown"] = np.where((df_1d["EMA10"].shift(1) < df_1d["EMA10"].shift(2)), 1, 0)
         df_1d["EMAUp"] = np.where((df_1d["EMA10"].shift(1) > df_1d["EMA10"].shift(2)), 1, 0)
 
+        # df_1d["CloseUp"] = np.where((df_1d["c"].shift(1) > df_1d["c"].shift(2)), 1, 0)
+
         # Add 33360 to the index to match the timestamp
         df_1d.index = df_1d.index + 33360
         df_1d.ti = df_1d.ti + 33360
@@ -77,11 +79,17 @@ class algoLogic(optOverNightAlgoLogic):
         TradeLimit = 0
         high_list = []
         low_list = []
+        low_list2 =[]
         High= None
         Low = None
         Range = None
         Bullish_Day = False
         Bearish_Day = False 
+        trailing = False
+        new_sl = None
+        New_Entry = False
+        Prev_Day_High = None
+        High_Trailing = False
 
 
 
@@ -109,18 +117,37 @@ class algoLogic(optOverNightAlgoLogic):
                 continue
 
             if lastIndexTimeData[1] not in df.index:
+                self.strategyLogger.info(f"{self.humanTime} No Data Found.")
                 continue
 
 
             if (self.humanTime.time() == time(9, 16)):
+                prev_day = timeData - 86400
                 TradeLimit = 0
                 high_list = []
                 low_list = []
+                low_list2 =[]
                 High= None
                 Low = None
                 Range = None
                 Bullish_Day = False
                 Bearish_Day = False
+                High_Trailing = False
+                Prev_Day_High = None
+
+                #check if previoud day exists in 1d data
+                while prev_day not in df_1d.index:
+                    prev_day = prev_day - 86400 
+
+
+                if not self.openPnl.empty:
+                    Prev_Day_High = df_1d.at[prev_day, "h"]
+                    # else:
+                    #     new_sl = df_1d.at[prev_day, "l"]
+
+                if New_Entry == False:
+                    New_Entry = True
+
 
                 if df_1d.at[timeData, 'EMADown'] == 1:
                     Bearish_Day = True
@@ -165,26 +192,51 @@ class algoLogic(optOverNightAlgoLogic):
 
                     symSide = row["Symbol"]
                     # symSide = symSide[len(symSide) - 2:]   
-                    # print("open_stock", symSide)  
-                    # print("current_stock", stock) 
-                            
-                    if self.humanTime.time() == time(15, 20):
-                        if row["CurrentPrice"] > row["EntryPrice"]:
-                            exitType = "Time Up"
-                            self.exitOrder(index, exitType)
 
+                    if df.at[lastIndexTimeData[1], "c"] < new_sl:
+                        exitType = "SL Hit"
+                        self.exitOrder(index, exitType)
+                        New_Entry = False
+
+            
+            if self.openPnl.empty:
+                low_list2.append(df.at[lastIndexTimeData[1], "l"])
+
+
+            # Trailling when market tests privious days High
+            if not self.openPnl.empty and Prev_Day_High is not None:
+                if df.at[lastIndexTimeData[1], "c"] > Prev_Day_High:
+                    High_Trailing= True
+                
 
 
             if (self.humanTime.time() < time(9, 21)):
                 continue
+
+            if High_Trailing:
+                if df.at[lastIndexTimeData[1], 'EMA10'] > High:
+                        High = df.at[lastIndexTimeData[1], 'EMA10']
+                        Low = High - Range
+                        self.strategyLogger.info(f"{self.humanTime} {baseSym} New High: {High}, Low: {Low}")
+                        new_sl = Low
+            
+            if self.openPnl.empty:
+                if df.at[lastIndexTimeData[1], 'EMA10'] < Low:
+                    Low = df.at[lastIndexTimeData[1], 'EMA10']
+                    High = Low + Range
+                    self.strategyLogger.info(f"{self.humanTime} {baseSym} New Low: {Low}, High: {High}")
+
             
             # Check for entry signals and execute orders
-            if ((timeData-60) in df.index) and self.openPnl.empty and (self.humanTime.time() < time(15, 20)):
+            if ((timeData-60) in df.index) and self.openPnl.empty and (self.humanTime.time() < time(15, 20)) and New_Entry:
                 if Bullish_Day and df.at[lastIndexTimeData[1], "c"] > High:
 
                     entry_price = df.at[lastIndexTimeData[1], "c"]
+                    new_sl = min(low_list2)
 
                     self.entryOrder(entry_price, baseSym, (amountPerTrade//entry_price), "BUY")
+                    low_list2.clear()
+
 
 
         # Calculate final PnL and combine CSVs
