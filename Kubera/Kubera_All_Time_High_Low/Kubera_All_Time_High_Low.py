@@ -148,6 +148,13 @@ class algoLogic(baseAlgoLogic):
             print(stockAlgoLogic.humanTime)
 
 
+            # # Skip the dates 2nd March 2024 and 18th May 2024
+            if stockAlgoLogic.humanTime.date() == datetime(2024, 3, 2).date():
+                if stockName == "BHARATFORG":
+                    stockAlgoLogic.strategyLogger.info(f"{stockAlgoLogic.humanTime} No Data for today {stockName}. Skipping date.")
+                    continue
+
+
             # Skip time periods outside trading hours
             if (stockAlgoLogic.humanTime.time() < time(9, 16)) | (stockAlgoLogic.humanTime.time() > time(15, 30)):
                 continue
@@ -264,54 +271,61 @@ class algoLogic(baseAlgoLogic):
                     # print("current_stock", stock) 
 
 
-                    if df.at[lastIndexTimeData[1], "c"] < df_1d.at[O_epoch, 'prev250_low']:
-                        exitType = "All Time Low Break"
-                        stockAlgoLogic.exitOrder(index, exitType)
-                        trailing = False
-                        SL_List.clear()
-                        New_Entry = False
-                        All_Time_High_Breaks = False 
-                        
+                    if row["PositionStatus"] == 1:
+                        if Bearish_Day:
+                            exitType = "Bearish Day Exit"
+                            stockAlgoLogic.exitOrder(index, exitType)
+                            trailing = False
+                            SL_List.clear()
 
-                    elif df.at[lastIndexTimeData[1], "c"] < new_sl:
-                        if row["CurrentPrice"] > row["EntryPrice"]:
-                            exitType = "SL Hit"
+                        elif df.at[lastIndexTimeData[1], "c"] < df_1d.at[O_epoch, 'prev250_low']:
+                            exitType = "All Time Low Break"
                             stockAlgoLogic.exitOrder(index, exitType)
                             trailing = False
                             SL_List.clear()
                             New_Entry = False
                             All_Time_High_Breaks = False 
+                        
+
+                        elif df.at[lastIndexTimeData[1], "c"] < new_sl and row["CurrentPrice"] > row["EntryPrice"]:
+                                exitType = "SL Hit"
+                                stockAlgoLogic.exitOrder(index, exitType)
+                                trailing = False
+                                SL_List.clear()
+                                New_Entry = False
+
+
+                    elif row["PositionStatus"] == -1:
+
+                        if stockAlgoLogic.humanTime.time() >= time(15, 20):
+                            exitType = "Time Up"
+                            stockAlgoLogic.exitOrder(index, exitType)
+
+                        elif df.at[lastIndexTimeData[1], "c"] > High and df.at[lastIndexTimeData[1], "EMA10"] > High:
+                            exitType = "Above High Exit"
+                            stockAlgoLogic.exitOrder(index, exitType)
             
 
-            if stockAlgoLogic.openPnl.empty:
+            if stockAlgoLogic.openPnl.empty and Bullish_Day:
                 low_list2.append(df.at[lastIndexTimeData[1], "l"])
+            
 
-
-            # tradecount = stockAlgoLogic.openPnl['Symbol'].value_counts()
-            # state["stockcount"]= tradecount.get(stockName, 0)
-
-
-            if (stockAlgoLogic.humanTime.time() < time(9, 21)):
-                continue  
-
-
-            if stockAlgoLogic.openPnl.empty and Channel_trailing:
-                if df.at[lastIndexTimeData[1], 'EMA10'] < Low and df.at[lastIndexTimeData[1], 'EMA10'] > Last_close:
+            if not stockAlgoLogic.openPnl.empty and Bearish_Day:
+                if df.at[lastIndexTimeData[1], 'EMA10'] < Low:
                     Low = df.at[lastIndexTimeData[1], 'EMA10']
                     High = Low + Range
                     stockAlgoLogic.strategyLogger.info(f"{stockAlgoLogic.humanTime} {stockName} New Low: {Low}, High: {High}")
 
-            # if Bullish_Day:
-            #     if df.at[lastIndexTimeData[1], 'EMA10'] < Low:
-            #         Low = df.at[lastIndexTimeData[1], 'EMA10']
-            #         High = Low + Range
-            #         stockAlgoLogic.strategyLogger.info(f"{stockAlgoLogic.humanTime} {stockName} New Low: {Low}, High: {High}")
 
-            # if Bearish_Day:
-            #     if df.at[lastIndexTimeData[1], 'EMA10'] > High:
-            #         High = df.at[lastIndexTimeData[1], 'EMA10']
-            #         Low = High - Range
-            #         stockAlgoLogic.strategyLogger.info(f"{stockAlgoLogic.humanTime} {stockName} New High: {High}, Low: {Low}")
+            if (stockAlgoLogic.humanTime.time() < time(9, 21)):
+                continue
+
+
+            if stockAlgoLogic.openPnl.empty and Channel_trailing and Bullish_Day:
+                if df.at[lastIndexTimeData[1], 'EMA10'] < Low and df.at[lastIndexTimeData[1], 'EMA10'] > Last_close:
+                    Low = df.at[lastIndexTimeData[1], 'EMA10']
+                    High = Low + Range
+                    stockAlgoLogic.strategyLogger.info(f"{stockAlgoLogic.humanTime} {stockName} New Low: {Low}, High: {High}")
 
 
             
@@ -324,6 +338,13 @@ class algoLogic(baseAlgoLogic):
                     stockAlgoLogic.entryOrder(entry_price, stockName, (amountPerTrade//entry_price), "BUY")
                     trailing = True
                     low_list2.clear()
+
+                if Bearish_Day and df.at[lastIndexTimeData[1], "c"] < Low and df.at[lastIndexTimeData[1], "EMA10"] < Low and TradeLimit < 3:
+
+                    entry_price = df.at[lastIndexTimeData[1], "c"]
+
+                    stockAlgoLogic.entryOrder(entry_price, stockName, (amountPerTrade//entry_price), "SELL")
+                    TradeLimit += 1
 
 
 
@@ -350,11 +371,11 @@ if __name__ == "__main__":
     version = "v1"
 
     # Define Start date and End date
-    startDate = datetime(2025, 1, 1, 9, 15)
+    startDate = datetime(2024, 1, 1, 9, 15)
     endDate = datetime(2025, 8, 30, 15, 30)
     # endDate = datetime.now()
 
-    portfolio = createPortfolio("/root/Lakshay_Algos/stocksList/nifty50.md",10)
+    portfolio = createPortfolio("/root/Lakshay_Algos/stocksList/fnoStocks173.md",10)
 
     algoLogicObj = algoLogic(devName, strategyName, version)
     fileDir, closedPnl = algoLogicObj.runBacktest(
