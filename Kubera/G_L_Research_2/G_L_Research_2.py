@@ -338,14 +338,14 @@ class algoLogic(optOverNightAlgoLogic):
                 gainer_values = [pct for pct in Perc_top5 if pct > 0]
                 Gainer_Sum = sum(gainer_values)
                 gainer_count = len(gainer_values)
-                Gainer_Avg = Gainer_Sum / gainer_count if gainer_count > 0 else 0
+                Gainer_Avg = Gainer_Sum / gainer_count if gainer_count > 0 else 1  # Avoid division by zero
 
                 # Sum and count only negative values for losers
                 loser_stocks = [stock for stock, pct in zip(bottom5, Perc_bottom5) if pct < 0]
                 loser_values = [pct for pct in Perc_bottom5 if pct < 0]
                 Loser_Sum = sum(loser_values)
                 loser_count = len(loser_values)
-                Loser_Avg = Loser_Sum / loser_count if loser_count > 0 else 0
+                Loser_Avg = Loser_Sum / loser_count if loser_count > 0 else 1  # Avoid division by zero
                 self.strategyLogger.info(f"{self.humanTime} Gainer Sum: {Gainer_Sum}, Loser Sum: {Loser_Sum}, Gainer Avg: {Gainer_Avg}, Loser Avg: {Loser_Avg}")
                 self.strategyLogger.info(f"Gainer Stocks: {gainer_stocks}, Loser Stocks: {loser_stocks}")
 
