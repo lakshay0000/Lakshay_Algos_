@@ -244,81 +244,6 @@ class algoLogic(optOverNightAlgoLogic):
 
                 # Calculate and update PnL
                 self.pnlCalculator()
-
-
-
-                #Updating daily index
-                # prev_day = timeData - 86400
-                # if (self.humanTime.time() == time(9, 16)):
-                #     # Today_open = df_1min.at[lastIndexTimeData[1], 'o']
-                #     state["Today_high"] = df_1min.at[lastIndexTimeData[1], 'h']
-                #     state["Today_low"]  = df_1min.at[lastIndexTimeData[1], 'l']
-                #     #check if previoud day exists in 1d data
-                #     while prev_day not in df_1d.index:
-                #         prev_day = prev_day - 86400
-
-                # if prev_day in df_1d.index:
-                #     state["prev_DH"] = (df_1d.at[prev_day, 'h'])
-                #     state["prev_DL"] = (df_1d.at[prev_day, 'l'])  
-                #     self.strategyLogger.info(f"{self.humanTime} Previous Day High: {state['prev_DH']}, Previous Day Low: {state['prev_DL']}, BarNo: {375 + state['i']}")
-
-                # if state["m_upper"] is None and state["m_lower"] is None:
-                #     state["m_upper"] = (state["Today_high"] - state["prev_DH"]) / (375)
-                #     state["m_lower"] = (state["Today_low"]  - state["prev_DL"]) / (375)
-                #     self.strategyLogger.info(f"{self.humanTime} Slope Upper: {state['m_upper']}, Slope Lower: {state['m_lower']}")  
-
-                # if lastIndexTimeData[1] in df_1min.index:
-                #     BarNo = 375 + state["i"]+ state["k"]
-                #     upper_ray = state["prev_DH"] + (state["m_upper"] * BarNo)
-                #     lower_ray = state["prev_DL"] + (state["m_lower"] * BarNo) 
-                #     state["i"] = state["i"]+ 1
-                #     self.strategyLogger.info(f"{self.humanTime} Upper Ray: {upper_ray}, Lower Ray: {lower_ray}, BarNo: {BarNo}")
-                #     state["high_list"].append(df_1min.at[lastIndexTimeData[1], "h"])
-                #     state["low_list"].append(df_1min.at[lastIndexTimeData[1], "l"])
-                #     state["high_list_Interval"].append(df_1min.at[lastIndexTimeData[1], "h"])
-                #     state["low_list_Interval"].append(df_1min.at[lastIndexTimeData[1], "l"])
-
-                # if upper_ray < lower_ray:
-                #     temp = upper_ray
-                #     a = lower_ray
-                #     lower_ray = temp
-
-                # if state["i"]== 60:
-                #     state["m_upper"] = None
-                #     state["m_lower"] = None
-                #     state["i"]= 0
-                #     state["k"] = state["k"] + 60
-
-                #     state["max_list"].append(max(state["high_list_Interval"]))
-                #     state["min_list"].append(min(state["low_list_Interval"]))
-
-                #     if len(state["max_list"]) < 3:
-
-                #         state["Today_high"] = max(state["high_list"])
-                #         high_index = state["high_list"].index(state["Today_high"])
-                #         state["Today_low"]  = min(state["low_list"])
-                #         low_index = state["low_list"].index(state["Today_low"] )
-
-                #     else:
-                #         # Consider last two max values for Today_high
-                #         last_two_max = state["max_list"][-2:]
-                #         state["Today_high"] = max(last_two_max)
-                #         high_index = len(state["high_list"]) - 1 - state["high_list"][::-1].index(state["Today_high"])
-
-                #         # Consider last two min values for Today_low
-                #         last_two_min = state["min_list"][-2:]
-                #         state["Today_low"] = min(last_two_min)
-                #         low_index = len(state["low_list"]) - 1 - state["low_list"][::-1].index(state["Today_low"])
-
-                    
-                #     state["high_list_Interval"] = []
-                #     state["low_list_Interval"] = [] 
-
-                #     state["m_upper"] = (state["Today_high"] - state["prev_DH"]) / (375+high_index)
-                #     state["m_lower"] = (state["Today_low"]  - state["prev_DL"]) / (375+low_index)
-
-                #     self.strategyLogger.info(f"{self.humanTime} 1 Hour Completed. High List: {state['Today_high']}, Low List: {state['Today_low']}, stock: {stock}")
-                #     self.strategyLogger.info(f"{self.humanTime} New Slope Upper: {state['m_upper']}, New Slope Lower: {state['m_lower']}")
                 
 
                 # Check for exit conditions and execute exit orders
@@ -373,37 +298,7 @@ class algoLogic(optOverNightAlgoLogic):
                                         top_merged.remove(stock)
                                     if stock in bottom_merged:
                                         bottom_merged.remove(stock)
-                        
-                            # elif (row["PositionStatus"]==1) and df_1min.at[lastIndexTimeData[1], "Supertrend"] == -1:
-                            #     exitType = "Lower Ray Hit"
-                            #     self.exitOrder(index, exitType)
-
-                            #     if stock in bottom5:
-
-                            #         entry_price = df_1min.at[lastIndexTimeData[1], "c"]
-
-                            #         self.entryOrder(entry_price, stock, (amountPerTrade//entry_price), "SELL")
-
-                                    # if self.humanTime.time() < time(10, 15):
-                                    #     state["Today_high"] = max(state["high_list"])
-                                    #     high_index = state["high_list"].index(state["Today_high"])
-                                    #     state["m_upper"] = (state["Today_high"] - state["prev_DH"]) / (375+high_index)
-
-
-                            # elif (row["PositionStatus"]==-1) and df_1min.at[lastIndexTimeData[1], "Supertrend"] == 1:
-                            #     exitType = "Upper Ray Hit"
-                            #     self.exitOrder(index, exitType)
-
-                            #     if stock in top5:
-
-                            #         entry_price = df_1min.at[lastIndexTimeData[1], "c"] 
-
-                            #         self.entryOrder(entry_price, stock, (amountPerTrade//entry_price), "BUY")
-
-                                    # if self.humanTime.time() < time(10, 15):
-                                    #     state["Today_low"] = min(state["low_list"])
-                                    #     low_index = state["low_list"].index(state["Today_low"])
-                                    #     state["m_lower"] = (state["Today_low"] - state["prev_DL"]) / (375+low_index)
+                                        
 
 
                 tradecount = self.openPnl['Symbol'].value_counts()

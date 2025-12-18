@@ -187,7 +187,7 @@ def calculate_mtm(closedPnl, saveFileDir, timeFrame="15T", mtm=False, equityMark
 
 
 
-df = pd.read_csv(r'/root/Lakshay_Algos/Kubera/Json/without exlcusion 2021-2024 - Sheet3.csv')
+df = pd.read_csv(r'/root/Lakshay_Algos/Kubera/Json/merged.csv')
 saveFileDir = r'/root/Lakshay_Algos/Kubera/Json'  
 
-calculate_mtm(df, saveFileDir, timeFrame="15T", mtm=True, equityMarket=True)
+calculate_mtm(df, saveFileDir, timeFrame=timedelta(hours=1), mtm=True, equityMarket=True)

@@ -64,7 +64,7 @@ class algoLogic(optOverNightAlgoLogic):
         conn = connectToMongo()
 
         # Read your stock list
-        with open("/root/Lakshay_Algos/stocksList/fnoStocks173.md") as f:
+        with open("/root/Lakshay_Algos/stocksList/Nifty_Consumer_Durables.md") as f:
             stock_list = [line.strip() for line in f if line.strip()]
 
 
@@ -113,11 +113,20 @@ class algoLogic(optOverNightAlgoLogic):
                 self.strategyLogger.info(
                     f"No data for {stock} in range {startDate} to {endDate}")
                 continue
+            
+            if stock == "HDFCBANK":
+                # Define the cutoff datetime
+                cutoff_time = pd.to_datetime('2025-07-29 09:15:00')
+
+                # Double close values at or after cutoff time
+                df_1min.loc[df_1min['datetime'] >= cutoff_time, 'c'] *= 2
 
 
             # Drop rows with missing values
             df_1min.dropna(inplace=True)
             # df_1d.dropna(inplace=True)
+
+
 
             # Calculate the 20-period EMA
             df_1min['EMA10'] = df_1min['c'].ewm(span=10, adjust=False).mean()
@@ -403,7 +412,7 @@ class algoLogic(optOverNightAlgoLogic):
             #             self.entryOrder(entry_price, stock, (amountPerTrade//entry_price), "BUY")
 
 
-        # Calculate final PnL and combine CSVs
+        # Calculate final PnL and combine CSVsn   
         self.pnlCalculator()
         self.combinePnlCsv()
 
@@ -423,7 +432,7 @@ if __name__ == "__main__":
 
     # Define Start date and End date
     startDate = datetime(2025, 1, 1, 9, 15)
-    endDate = datetime(2025, 8, 30, 15, 30)
+    endDate = datetime(2025, 11, 30, 15, 30)
 
     # Create algoLogic object
     algo = algoLogic(devName, strategyName, version)

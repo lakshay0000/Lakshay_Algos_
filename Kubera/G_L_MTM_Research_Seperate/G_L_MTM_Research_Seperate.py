@@ -50,10 +50,10 @@ class algoLogic(optOverNightAlgoLogic):
         # Sort by percentage change
         if G_L == True:
             pct_changes_sorted = sorted(pct_changes, key=lambda x: x[1], reverse=True)
-            top5 = [x[0] for x in pct_changes_sorted[:10]]
-            Perc_top5 = [x[1] for x in pct_changes_sorted[:10]]
-            bottom5 = [x[0] for x in pct_changes_sorted[-10:]]
-            Perc_bottom5 = [x[1] for x in pct_changes_sorted[-10:]]
+            top5 = [x[0] for x in pct_changes_sorted[:5]]
+            Perc_top5 = [x[1] for x in pct_changes_sorted[:5]]
+            bottom5 = [x[0] for x in pct_changes_sorted[-5:]]
+            Perc_bottom5 = [x[1] for x in pct_changes_sorted[-5:]]
             return top5, bottom5, pct_changes_sorted, Perc_top5, Perc_bottom5
 
         else:
@@ -64,7 +64,7 @@ class algoLogic(optOverNightAlgoLogic):
         conn = connectToMongo()
 
         # Read your stock list
-        with open("/root/Lakshay_Algos/stocksList/fnoStocks173.md") as f:
+        with open("/root/Lakshay_Algos/stocksList/nifty50.md") as f:
             stock_list = [line.strip() for line in f if line.strip()]
 
 
@@ -166,7 +166,11 @@ class algoLogic(optOverNightAlgoLogic):
         # lotSize = int(getExpiryData(self.timeData, baseSym)["LotSize"])
         amountPerTrade = 100000
         New_iteration = False
-        GL_ratio_records = []
+        pnnl_G = []
+        pnnl_L = []
+        MTM_records_G = []
+        MTM_records_L = []
+        
 
         # At the start of your run() method
         # daily_folder = os.path.join(self.fileDir['backtestResultsStrategyUid'], "GL.ratio_daily")
@@ -176,6 +180,7 @@ class algoLogic(optOverNightAlgoLogic):
         # Loop through each timestamp in the DataFrame index
         for timeData in df.index: 
             New_iteration = True
+
 
             for stock in stock_list:
 
@@ -192,8 +197,8 @@ class algoLogic(optOverNightAlgoLogic):
                 print(self.humanTime)
 
                 # # Skip the dates 2nd March 2024 and 18th May 2024
-                # if self.humanTime.date() == datetime(2024, 3, 2).date() or self.humanTime.date() == datetime(2024, 2, 15).date():
-                #     continue
+                if self.humanTime.date() == datetime(2025, 10, 21).date():
+                    continue
 
                 # Skip time periods outside trading hours
                 if (self.humanTime.time() < time(9, 16)) | (self.humanTime.time() > time(15, 30)):
@@ -208,13 +213,13 @@ class algoLogic(optOverNightAlgoLogic):
                     continue
 
                 if lastIndexTimeData[1] not in df_1min.index:
-                    continue
+                    self.strategyLogger.info(f"Data missing for {stock} at {datetime.fromtimestamp(lastIndexTimeData[1])}")
 
                 #  # Log relevant information
                 # if lastIndexTimeData[1] in df.index:
                 #     self.strategyLogger.info(f"Datetime: {self.humanTime}\tClose: {df.at[lastIndexTimeData[1],'c']}")
 
-                if (self.humanTime.time() == time(9, 16)) and New_iteration:
+                if (self.humanTime.time() == time(9, 17)) and New_iteration:
                     # state["m_upper"] = None
                     # state["m_lower"] = None
                     # state["i"] = 0
@@ -226,10 +231,12 @@ class algoLogic(optOverNightAlgoLogic):
                     # state["low_list_Interval"] = [] 
                     # state["max_list"] = []
                     # state["min_list"] = []
+                    pnnl_G = []
+                    pnnl_L = []
                     top_merged = []
                     bottom_merged = []
                     openEpoch = lastIndexTimeData[1]
-                    with open("/root/Lakshay_Algos/stocksList/fnoStocks173.md") as f:
+                    with open("/root/Lakshay_Algos/stocksList/nifty50.md") as f:
                         stock_list = [line.strip() for line in f if line.strip()]
 
                     New_iteration = False
@@ -247,85 +254,12 @@ class algoLogic(optOverNightAlgoLogic):
 
 
 
-                #Updating daily index
-                # prev_day = timeData - 86400
-                # if (self.humanTime.time() == time(9, 16)):
-                #     # Today_open = df_1min.at[lastIndexTimeData[1], 'o']
-                #     state["Today_high"] = df_1min.at[lastIndexTimeData[1], 'h']
-                #     state["Today_low"]  = df_1min.at[lastIndexTimeData[1], 'l']
-                #     #check if previoud day exists in 1d data
-                #     while prev_day not in df_1d.index:
-                #         prev_day = prev_day - 86400
-
-                # if prev_day in df_1d.index:
-                #     state["prev_DH"] = (df_1d.at[prev_day, 'h'])
-                #     state["prev_DL"] = (df_1d.at[prev_day, 'l'])  
-                #     self.strategyLogger.info(f"{self.humanTime} Previous Day High: {state['prev_DH']}, Previous Day Low: {state['prev_DL']}, BarNo: {375 + state['i']}")
-
-                # if state["m_upper"] is None and state["m_lower"] is None:
-                #     state["m_upper"] = (state["Today_high"] - state["prev_DH"]) / (375)
-                #     state["m_lower"] = (state["Today_low"]  - state["prev_DL"]) / (375)
-                #     self.strategyLogger.info(f"{self.humanTime} Slope Upper: {state['m_upper']}, Slope Lower: {state['m_lower']}")  
-
-                # if lastIndexTimeData[1] in df_1min.index:
-                #     BarNo = 375 + state["i"]+ state["k"]
-                #     upper_ray = state["prev_DH"] + (state["m_upper"] * BarNo)
-                #     lower_ray = state["prev_DL"] + (state["m_lower"] * BarNo) 
-                #     state["i"] = state["i"]+ 1
-                #     self.strategyLogger.info(f"{self.humanTime} Upper Ray: {upper_ray}, Lower Ray: {lower_ray}, BarNo: {BarNo}")
-                #     state["high_list"].append(df_1min.at[lastIndexTimeData[1], "h"])
-                #     state["low_list"].append(df_1min.at[lastIndexTimeData[1], "l"])
-                #     state["high_list_Interval"].append(df_1min.at[lastIndexTimeData[1], "h"])
-                #     state["low_list_Interval"].append(df_1min.at[lastIndexTimeData[1], "l"])
-
-                # if upper_ray < lower_ray:
-                #     temp = upper_ray
-                #     a = lower_ray
-                #     lower_ray = temp
-
-                # if state["i"]== 60:
-                #     state["m_upper"] = None
-                #     state["m_lower"] = None
-                #     state["i"]= 0
-                #     state["k"] = state["k"] + 60
-
-                #     state["max_list"].append(max(state["high_list_Interval"]))
-                #     state["min_list"].append(min(state["low_list_Interval"]))
-
-                #     if len(state["max_list"]) < 3:
-
-                #         state["Today_high"] = max(state["high_list"])
-                #         high_index = state["high_list"].index(state["Today_high"])
-                #         state["Today_low"]  = min(state["low_list"])
-                #         low_index = state["low_list"].index(state["Today_low"] )
-
-                #     else:
-                #         # Consider last two max values for Today_high
-                #         last_two_max = state["max_list"][-2:]
-                #         state["Today_high"] = max(last_two_max)
-                #         high_index = len(state["high_list"]) - 1 - state["high_list"][::-1].index(state["Today_high"])
-
-                #         # Consider last two min values for Today_low
-                #         last_two_min = state["min_list"][-2:]
-                #         state["Today_low"] = min(last_two_min)
-                #         low_index = len(state["low_list"]) - 1 - state["low_list"][::-1].index(state["Today_low"])
-
-                    
-                #     state["high_list_Interval"] = []
-                #     state["low_list_Interval"] = [] 
-
-                #     state["m_upper"] = (state["Today_high"] - state["prev_DH"]) / (375+high_index)
-                #     state["m_lower"] = (state["Today_low"]  - state["prev_DL"]) / (375+low_index)
-
-                #     self.strategyLogger.info(f"{self.humanTime} 1 Hour Completed. High List: {state['Today_high']}, Low List: {state['Today_low']}, stock: {stock}")
-                #     self.strategyLogger.info(f"{self.humanTime} New Slope Upper: {state['m_upper']}, New Slope Lower: {state['m_lower']}")
-
-
-                if (self.humanTime.minute % 5 == 0) and (self.humanTime.time() < time(15, 20)) and New_iteration:
+                if (self.humanTime.time() == time(9, 21)) and (self.humanTime.time() < time(15, 20)) and New_iteration:
 
                     top5, bottom5, pct_changes_sorted, Perc_top5, Perc_bottom5 = self.get_daily_top_bottom_stocks(stock_list, openEpoch, lastIndexTimeData[1], stock_1min_data)
 
                     selected_stocks = top5 + bottom5
+                    stock_list = selected_stocks
 
                     self.strategyLogger.info(f"{self.humanTime} Gainers: {top5}, Losers: {bottom5}")
                     self.strategyLogger.info(f"{self.humanTime} Gainers %: {Perc_top5}, Losers %: {Perc_bottom5}")
@@ -345,18 +279,6 @@ class algoLogic(optOverNightAlgoLogic):
                         if self.humanTime.time() >= time(15, 20):
                             exitType = "Time Up"
                             self.exitOrder(index, exitType)
-
-                        # elif symSide == stock:
-                        #     if (row["PositionStatus"]==1):
-                        #         if stock not in top5:
-                        #             exitType = "Not in Top 5"
-                        #             self.exitOrder(index, exitType)
-
-
-                        #     elif (row["PositionStatus"]==-1):
-                        #         if stock not in bottom5:
-                        #             exitType = "Not in Bottom 5"
-                        #             self.exitOrder(index, exitType)
                                     
 
 
@@ -364,45 +286,162 @@ class algoLogic(optOverNightAlgoLogic):
                 state["stockcount"]= tradecount.get(stock, 0)
 
 
-                # if (self.humanTime.minute % 5 == 0) and (self.humanTime.time() < time(15, 20)) and New_iteration:
 
-                #     top5, bottom5, pct_changes_sorted, Perc_top5, Perc_bottom5 = self.get_daily_top_bottom_stocks(stock_list, openEpoch, lastIndexTimeData[1], stock_1min_data)
-
-                #     selected_stocks = top5 + bottom5
-
-                #     self.strategyLogger.info(f"{self.humanTime} Gainers: {top5}, Losers: {bottom5}")
-                #     self.strategyLogger.info(f"{self.humanTime} Gainers %: {Perc_top5}, Losers %: {Perc_bottom5}")
-                #     self.strategyLogger.info(f"{self.humanTime} Top Merged: {top_merged}, Bottom Merged: {bottom_merged}")
-                #     New_iteration = False
-
-
-
-                if (self.humanTime.time() < time(9, 20)):
+                if (self.humanTime.time() < time(9, 21)):
                     continue
+
+                if (self.humanTime.time() > time(9, 21)):
+                    if lastIndexTimeData[1] in df_1min.index:
+                        state["Current_price"] = df_1min.at[lastIndexTimeData[1], "c"]
+                    else:
+                        state["Current_price"] = state["Current_price"]
+
+                    if stock in top5:
+                        pnl= (state["Current_price"] - state["entry_price"]) * state["Quantity"]
+                        self.strategyLogger.info(f"{self.humanTime} {stock} Current_price: {state['Current_price']} Entry_price: {state['entry_price']} Quantity: {state['Quantity']} PnL: {pnl}")
+                        pnnl_G.append(pnl)
+
+                    elif stock in bottom5:
+                        pnl= (state["entry_price"] - state["Current_price"]) * state["Quantity"]
+                        self.strategyLogger.info(f"{self.humanTime} {stock} Current_price: {state['Current_price']} Entry_price: {state['entry_price']} Quantity: {state['Quantity']} PnL: {pnl}")
+                        pnnl_L.append(pnl)
+
 
                 # Check for entry signals and execute orders
                 if ((timeData-60) in df_1min.index) and (self.humanTime.time() < time(15, 20)):
 
-                    if (stock in bottom5) and (state["stockcount"] ==0):
+                    if self.humanTime.time() == time(9, 21):
+                        if (stock in bottom5) and (state["stockcount"] ==0):
 
-                        entry_price = df_1min.at[lastIndexTimeData[1], "c"]
+                            entry_price = df_1min.at[lastIndexTimeData[1], "c"]
+                            state["Quantity"] = (amountPerTrade//entry_price)
+                            state["entry_price"]= df_1min.at[lastIndexTimeData[1], "c"]
 
-                        self.entryOrder(entry_price, stock, (amountPerTrade//entry_price), "SELL") 
-                        
+                            self.entryOrder(entry_price, stock, (amountPerTrade//entry_price), "SELL") 
+                            
+                    
+                        if (stock in top5) and (state["stockcount"] ==0):
+
+                            entry_price = df_1min.at[lastIndexTimeData[1], "c"]
+                            state["Quantity"] = (amountPerTrade//entry_price)
+                            state["entry_price"]= df_1min.at[lastIndexTimeData[1], "c"]
+
+                            self.entryOrder(entry_price, stock, (amountPerTrade//entry_price), "BUY")
+
+
+                    # if self.humanTime.time() > time(9, 21):
+                    #     if (stock in bottom5) and (state["stockcount"] ==0):
+                    #         if MTM_pnl > 0:
+
+                    #             entry_price = df_1min.at[lastIndexTimeData[1], "c"]
+
+                    #             self.entryOrder(entry_price, stock, state["Quantity"], "SELL") 
+                            
+                    
+                    #     if (stock in top5) and (state["stockcount"] ==0):
+                    #         if MTM_pnl > 0:
+
+                    #             entry_price = df_1min.at[lastIndexTimeData[1], "c"]
+
+                    #             self.entryOrder(entry_price, stock, state["Quantity"], "BUY")
+
                 
-                    if (stock in top5) and (state["stockcount"] ==0):
 
-                        entry_price = df_1min.at[lastIndexTimeData[1], "c"]
+            # After processing all stocks at the current timestamp
+            if self.humanTime.time() == time(9, 21):
+                MTM_pnl_G = 0
+                MTM_pnl_L = 0
 
-                        self.entryOrder(entry_price, stock, (amountPerTrade//entry_price), "BUY")
+                # G_L_ratio in a list of dictionaries during your loop
+                MTM_records_G.append({
+                    "Datetime": self.humanTime,
+                    "MTM": MTM_pnl_G
+                })
+
+                MTM_records_L.append({
+                    "Datetime": self.humanTime,
+                    "MTM": MTM_pnl_L
+                })
+
+            if self.humanTime.time() > time(9, 21) and self.humanTime.time() < time(15, 20):
+                MTM_pnl_G = sum(pnnl_G)
+                self.strategyLogger.info(f"{self.humanTime} pnnl_G: {pnnl_G}")
+                MTM_pnl_L = sum(pnnl_L)
+                self.strategyLogger.info(f"{self.humanTime} pnnl_L: {pnnl_L}")
+
+                self.strategyLogger.info(f"{self.humanTime} MTM PnL_G: {MTM_pnl_G} MTM PnL_L: {MTM_pnl_L}")
+                pnnl_G = []
+                pnnl_L = []
+
+                # G_L_ratio in a list of dictionaries during your loop
+                MTM_records_G.append({
+                    "Datetime": self.humanTime,
+                    "MTM": round(MTM_pnl_G, 2)
+                })
+
+                MTM_records_L.append({
+                    "Datetime": self.humanTime,
+                    "MTM": round(MTM_pnl_L, 2)
+                })
+                
+                if len(self.openPnl) < 8:
+                    if MTM_pnl_G > 0 or MTM_pnl_L > 0:
+                        for stock in stock_list:
+
+                            state = stock_state[stock]
+
+                            # Then, inside your main loop, use:
+                            df_1min = stock_1min_data.get(stock)
+                            # df_1d = stock_1d_data.get(stock)
+                            if df_1min is None:
+                                continue
+
+                            # if lastIndexTimeData[1] not in df_1min.index:
+                            #     lastIndexTimeData[1] = lastIndexTimeData[1]-60
+                            #     self.strategyLogger.info(f"Data missing for {stock} at {datetime.fromtimestamp(lastIndexTimeData[1])}")
+
+                            if (stock in bottom5) and (state["stockcount"] ==0):
+                                if MTM_pnl_L > 0:
+
+                                    entry_price = df_1min.at[lastIndexTimeData[1], "c"]
+
+                                    self.entryOrder(entry_price, stock, state["Quantity"], "SELL") 
+                                
+                        
+                            if (stock in top5) and (state["stockcount"] ==0):
+                                if MTM_pnl_G > 0:
+
+                                    entry_price = df_1min.at[lastIndexTimeData[1], "c"]
+
+                                    self.entryOrder(entry_price, stock, state["Quantity"], "BUY")
+
+                    
+                # Check for MTM loss exit
+                if not self.openPnl.empty:
+                    if MTM_pnl_G < 0:
+                        for index, row in self.openPnl.iterrows():
+                            if row["PositionStatus"] == 1:
+                                exitType = "Negative MTM Gainers"
+                                self.exitOrder(index, exitType) 
+
+                    if MTM_pnl_L < 0:
+                        for index, row in self.openPnl.iterrows():
+                            if row["PositionStatus"] == -1:
+                                exitType = "Negative MTM Losers"
+                                self.exitOrder(index, exitType)
+
+                    
 
 
         # Calculate final PnL and combine CSVs
         self.pnlCalculator()
         self.combinePnlCsv()
 
-        # gl_ratio_df = pd.DataFrame(GL_ratio_records)
-        # gl_ratio_df.to_csv(f"{self.fileDir['backtestResultsStrategyUid']}GL_ratio_daily.csv", index=False)
+        gl_ratio_df = pd.DataFrame(MTM_records_G)
+        gl_ratio_df.to_csv(f"{self.fileDir['backtestResultsStrategyUid']}MTM_records_Gainers.csv", index=False)
+
+        gl_ratio_df_L = pd.DataFrame(MTM_records_L)
+        gl_ratio_df_L.to_csv(f"{self.fileDir['backtestResultsStrategyUid']}MTM_records_Losers.csv", index=False)
 
         return self.closedPnl, self.fileDir["backtestResultsStrategyUid"]
 
@@ -417,14 +456,14 @@ if __name__ == "__main__":
 
     # Define Start date and End date
     startDate = datetime(2025, 1, 1, 9, 15)
-    endDate = datetime(2025, 8, 30, 15, 30)
+    endDate = datetime(2025, 11, 30, 15, 30)
 
     # Create algoLogic object
     algo = algoLogic(devName, strategyName, version)
 
     # Define Index Name
-    baseSym = "NIFTY IT"
-    indexName = "NIFTY IT"
+    baseSym = "NIFTY"
+    indexName = "NIFTY 50"
 
     # Execute the algorithm
     closedPnl, fileDir = algo.run(startDate, endDate, baseSym, indexName)
