@@ -340,7 +340,7 @@ class algoLogic(optOverNightAlgoLogic):
 
                 # Check for entry signals and execute orders
                 if ((timeData-60) in df_1min.index) and (self.humanTime.time() < time(15, 20)):
-                    if (state["stockcount"] == 0):
+                    if (state["stockcount"] ==0):
                         if (stock in bottom):
 
                             entry_price = df_1min.at[lastIndexTimeData[1], "c"]
