@@ -101,18 +101,18 @@ class algoLogic(optOverNightAlgoLogic):
                 expiryDatetime = datetime.strptime(Currentexpiry, "%d%b%y").replace(hour=15, minute=20)
                 expiryEpoch= expiryDatetime.timestamp()
 
-            if (lastIndexTimeData[1] in df.index) and self.humanTime.time() < time(15, 20):
-                # Current 25-multiple
-                spot = df.at[lastIndexTimeData[1], "c"]
-                level = int(spot // 25) * 25
-                self.strategyLogger.info(f"Current Level: {level} at {self.humanTime}")
+            # if (lastIndexTimeData[1] in df.index) and self.humanTime.time() < time(15, 20):
+            #     # Current 25-multiple
+            #     spot = df.at[lastIndexTimeData[1], "c"]
+            #     level = int(spot // 25) * 25
+            #     self.strategyLogger.info(f"Current Level: {level} at {self.humanTime}")
 
-                # Ensure state exists for this level
-                if level not in level_state:
-                    level_state[level] = {"put": False, "call": False, "discard": False}
-                    self.strategyLogger.info(f"Initialized state for level: {level}")
+            #     # Ensure state exists for this level
+            #     if level not in level_state:
+            #         level_state[level] = {"put": False, "call": False, "discard": False}
+            #         self.strategyLogger.info(f"Initialized state for level: {level}")
 
-                st = level_state[level]
+            #     st = level_state[level]
 
 
             # Check for exit conditions and execute exit orders
@@ -131,7 +131,7 @@ class algoLogic(optOverNightAlgoLogic):
 
 
             # Check for entry signals and execute orders
-            if ((timeData-60) in df.index) and self.humanTime.time() > time(9, 16) and self.humanTime.time() < time(15, 20):
+            if ((timeData-60) in df.index) and self.humanTime.time() > time(9, 16) and (lastIndexTimeData[0] in df.index) and self.humanTime.time() < time(15, 20):
 
                 if not st["discard"]:
 
@@ -177,6 +177,20 @@ class algoLogic(optOverNightAlgoLogic):
                     st["discard"] = True
                     self.strategyLogger.info(f"Discarded at Level: {level} on {self.humanTime}")
 
+            
+            if (lastIndexTimeData[1] in df.index) and self.humanTime.time() < time(15, 20):
+                # Current 25-multiple
+                spot = df.at[lastIndexTimeData[1], "c"]
+                level = round(spot / 25) * 25
+                self.strategyLogger.info(f"Current Level: {level} at {self.humanTime}")
+
+                # Ensure state exists for this level
+                if level not in level_state:
+                    level_state[level] = {"put": False, "call": False, "discard": False}
+                    self.strategyLogger.info(f"Initialized state for level: {level}")
+
+                st = level_state[level]   
+
 
 
         # Calculate final PnL and combine CSVs
@@ -195,7 +209,7 @@ if __name__ == "__main__":
     version = "v1"
 
     # Define Start date and End date
-    startDate = datetime(2025, 11, 1, 9, 15)
+    startDate = datetime(2025, 1, 1, 9, 15)
     endDate = datetime(2025, 11, 30, 15, 30)
 
     # Create algoLogic object

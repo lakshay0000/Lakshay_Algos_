@@ -173,7 +173,7 @@ class algoLogic(optOverNightAlgoLogic):
         Low = None
         Range = None
         New_iteration = False
-        df_GL = pd.read_csv("/root/Lakshay_Algos/stocksList/Best_Indices_Pair.csv")
+        df_GL = pd.read_csv("/root/Lakshay_Algos/stocksList/Worst_Indices_Pair.csv")
 
         df_GL['Datetime'] = pd.to_datetime(df_GL['Datetime'])
         df_GL.set_index(df_GL['Datetime'].dt.date, inplace=True)
@@ -374,7 +374,7 @@ if __name__ == "__main__":
     version = "v1"
 
     # Define Start date and End date
-    startDate = datetime(2025, 1, 2, 9, 15)
+    startDate = datetime(2025, 7, 16, 9, 15)
     endDate = datetime(2025, 11, 30, 15, 30)
 
     # Create algoLogic object
