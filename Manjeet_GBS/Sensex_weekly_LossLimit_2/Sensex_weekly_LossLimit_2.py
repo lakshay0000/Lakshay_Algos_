@@ -382,7 +382,7 @@ if __name__ == "__main__":
 
     # Define Start date and End date
     startDate = datetime(2024, 1, 1, 9, 15)
-    endDate = datetime(2025, 11, 30, 15, 30)
+    endDate = datetime(2025, 12, 31, 15, 30)
 
     # Create algoLogic object
     algo = algoLogic(devName, strategyName, version)
