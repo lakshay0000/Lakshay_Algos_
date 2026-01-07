@@ -152,7 +152,9 @@ class algoLogic(optOverNightAlgoLogic):
                 # "Today_low": None,
                 # "prev_DH": None,
                 # "prev_DL": None,
-                "stockcount": None
+                "stockcount": None,
+                "Trail_target": None,
+                "Stoploss": None,
             }
 
 
@@ -172,6 +174,7 @@ class algoLogic(optOverNightAlgoLogic):
         High= None
         Low = None
         Range = None
+        Trail = 0.005
         New_iteration = False
         df_GL = pd.read_csv("/root/Lakshay_Algos/stocksList/Best_Hybrid_Interval_Pairs_Sticky.csv")
 
@@ -288,6 +291,8 @@ class algoLogic(optOverNightAlgoLogic):
                     state["Range"] = None
                     state["SecondTrade"] = False
                     openEpoch = lastIndexTimeData[1]
+                    state["Trail_target"] = None
+                    state["Stoploss"] = None
                     # self.strategyLogger.info(f"{self.humanTime} stocklist: {stock_list}")
                     # stock_merged = []
                     # with open("/root/Lakshay_Algos/stocksList/nifty50.md") as f:
@@ -318,6 +323,7 @@ class algoLogic(optOverNightAlgoLogic):
 
                 # Update current price for open positions
                 if not self.openPnl.empty and New_iteration:
+                    New_iteration = False
                     for index, row in self.openPnl.iterrows():
                         symSide = row["Symbol"]
                         df_Upd = stock_1min_data.get(symSide)
@@ -332,8 +338,7 @@ class algoLogic(optOverNightAlgoLogic):
                 
 
                 # Check for exit conditions and execute exit orders
-                if not self.openPnl.empty and New_iteration:
-                    New_iteration = False
+                if not self.openPnl.empty:
                     for index, row in self.openPnl.iterrows():
 
                         symSide = row["Symbol"]
@@ -344,14 +349,29 @@ class algoLogic(optOverNightAlgoLogic):
                         if self.humanTime.time() >= time(15, 20):
                             exitType = "Time Up"
                             self.exitOrder(index, exitType)
+                        
+                        elif symSide == stock:
+                            if row["PositionStatus"] == 1:
+                                if symSide not in top:
+                                    exitType = "Stock out of Top List"
+                                    self.exitOrder(index, exitType)
+                                elif state["Stoploss"] is not None:
+                                    if df_1min.at[lastIndexTimeData[1], "c"] < state["Stoploss"]:
+                                        exitType = "Stoploss Hit"
+                                        self.exitOrder(index, exitType)
+                                        stock_list.remove(stock)
+                                        top.remove(stock)
 
-                        elif row["PositionStatus"] == 1 and symSide not in top:
-                            exitType = "Stock out of Top List"
-                            self.exitOrder(index, exitType)
-
-                        elif row["PositionStatus"] == -1 and symSide not in bottom:
-                            exitType = "Stock out of Bottom List"
-                            self.exitOrder(index, exitType)
+                            elif row["PositionStatus"] == -1:
+                                if symSide not in bottom:
+                                    exitType = "Stock out of Bottom List"
+                                    self.exitOrder(index, exitType)
+                                elif state["Stoploss"] is not None:
+                                    if df_1min.at[lastIndexTimeData[1], "c"] > state["Stoploss"]:
+                                        exitType = "Stoploss Hit"
+                                        self.exitOrder(index, exitType)
+                                        stock_list.remove(stock)
+                                        bottom.remove(stock)
 
 
 
@@ -370,6 +390,29 @@ class algoLogic(optOverNightAlgoLogic):
 
                 tradecount = self.openPnl['Symbol'].value_counts()
                 state["stockcount"]= tradecount.get(stock, 0)
+
+                if state["Trail_target"] is not None:
+                    # Determine position direction for trailing logic
+                    position_status = 0
+                    if not self.openPnl.empty:
+                        # Find the row for this stock
+                        for idx, row in self.openPnl.iterrows():
+                            if row["Symbol"] == stock:
+                                position_status = row["PositionStatus"]
+                                break
+                    # For BUY trades, trail upwards; for SELL trades, trail downwards
+                    if position_status == 1:
+                        # BUY: trail upwards
+                        if df_1min.at[lastIndexTimeData[1], "c"] > state["Trail_target"]:
+                            state["Stoploss"] = state["Trail_target"]
+                            state["Trail_target"] = df_1min.at[lastIndexTimeData[1], "c"] + (Trail * df_1min.at[lastIndexTimeData[1], "c"])
+                            self.strategyLogger.info(f"{self.humanTime} {stock} New Trail Target for BUY: {state['Trail_target']}, New Stoploss: {state['Stoploss']}")
+                    elif position_status == -1:
+                        # SELL: trail downwards
+                        if df_1min.at[lastIndexTimeData[1], "c"] < state["Trail_target"]:
+                            state["Stoploss"] = state["Trail_target"]
+                            state["Trail_target"] = df_1min.at[lastIndexTimeData[1], "c"] - (Trail * df_1min.at[lastIndexTimeData[1], "c"])
+                            self.strategyLogger.info(f"{self.humanTime} {stock} New Trail Target for SELL: {state['Trail_target']}, New Stoploss: {state['Stoploss']}")
 
 
                 # if (self.humanTime.time() == time(15, 21)) and New_iteration:
@@ -393,16 +436,16 @@ class algoLogic(optOverNightAlgoLogic):
                 # Check for entry signals and execute orders
                 if ((timeData-60) in df_1min.index) and (self.humanTime.time() < time(15, 20)):
                     if (state["stockcount"] ==0):
+                        entry_price = df_1min.at[lastIndexTimeData[1], "c"]
                         if stock in bottom:
-
-                            entry_price = df_1min.at[lastIndexTimeData[1], "c"]
-
+                            # SELL: trail below entry
+                            state["Trail_target"] = entry_price - (Trail * entry_price)
+                            self.strategyLogger.info(f"{self.humanTime} {stock} Placing SELL order at {entry_price} Trail_target: {state['Trail_target']}")
                             self.entryOrder(entry_price, stock, (amountPerTrade//entry_price), "SELL")
-
                         if stock in top:
-
-                            entry_price = df_1min.at[lastIndexTimeData[1], "c"]
-
+                            # BUY: trail above entry
+                            state["Trail_target"] = entry_price + (Trail * entry_price)
+                            self.strategyLogger.info(f"{self.humanTime} {stock} Placing BUY order at {entry_price} Trail_target: {state['Trail_target']}")
                             self.entryOrder(entry_price, stock, (amountPerTrade//entry_price), "BUY")
 
 
