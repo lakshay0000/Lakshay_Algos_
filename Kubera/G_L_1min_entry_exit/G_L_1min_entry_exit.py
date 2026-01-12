@@ -17,7 +17,7 @@ class algoLogic(optOverNightAlgoLogic):
     def run(self, startDate, endDate, baseSym, indexSym):
 
         # Add necessary columns to the DataFrame
-        col = ["Target", "Stoploss", "Expiry"]
+        col = ["Target", "Stoploss", "Expiry","pnl_wq"]
         self.addColumnsToOpenPnlDf(col)
 
         # Convert start and end dates to timestamps
@@ -26,7 +26,7 @@ class algoLogic(optOverNightAlgoLogic):
 
         try:
             # Fetch historical data for backtesting
-            df = getEquityBacktestData(indexSym, startEpoch-(86400*50), endEpoch, "1Min")
+            df = getEquityBacktestData(indexSym, startEpoch, endEpoch, "1Min")
             df_1d = getEquityBacktestData(indexSym, startEpoch-(86400*10), endEpoch, "1D")
         except Exception as e:
             # Log an exception if data retrieval fails
@@ -39,11 +39,11 @@ class algoLogic(optOverNightAlgoLogic):
         # df_1d.dropna(inplace=True)
 
         # Calculate the 20-period EMA
-        df['EMA10'] = df['c'].ewm(span=10, adjust=False).mean()
+        # df['EMA10'] = df['c'].ewm(span=10, adjust=False).mean()
         
         df_1d.dropna(inplace=True)
 
-        df = df[df.index >= startEpoch]
+        # df = df[df.index >= startEpoch]
 
         # # Determine crossover signals
         # df_1d["EMADown"] = np.where((df_1d["EMA10"].shift(1) < df_1d["EMA10"].shift(2)), 1, 0)
@@ -84,7 +84,7 @@ class algoLogic(optOverNightAlgoLogic):
         Trade_count = 0
         consecutive_green_days = 0
         New_entry = True
-
+        Profit_exit_check = False
 
 
 
@@ -151,7 +151,7 @@ class algoLogic(optOverNightAlgoLogic):
 
             # Calculate and update PnL
             self.pnlCalculator()
-            # self.openPnl["pnl_wq"] = ((self.openPnl["CurrentPrice"] - self.openPnl["EntryPrice"]) * self.openPnl["PositionStatus"])
+            self.openPnl["pnl_wq"] = ((self.openPnl["CurrentPrice"] - self.openPnl["EntryPrice"]) * self.openPnl["PositionStatus"])
 
             if Interaday_Trade:
                 if (self.humanTime.time() < time(15, 20)):
@@ -174,8 +174,8 @@ class algoLogic(optOverNightAlgoLogic):
 
 
             # Check for exit conditions and execute exit orders
-            if not self.openPnl.empty and exit_signal == False:
-                # Pnl_Sum = self.openPnl['Pnl'].sum()
+            if not self.openPnl.empty:
+                Pnl_Sum = self.openPnl['Pnl'].sum()
                 for index, row in self.openPnl.iterrows():
 
                     symSide = row["Symbol"]
@@ -192,6 +192,13 @@ class algoLogic(optOverNightAlgoLogic):
                                 prev_day_high = max(High_List)
                                 High_List = []
 
+                        elif df.at[lastIndexTimeData[1], "c"] < open_price and (df.at[lastIndexTimeData[1], "c"] < df_1d.at[prev_day, "l"]) and Profit_exit_check == False:
+                            # exit_signal=True
+                            self.strategyLogger.info(f"{self.humanTime} {baseSym} Exit Signal Triggered: Time Up and Price below Open Price")
+                            if Pnl_Sum >= 0:
+                                exitType = "Red Candle Early Traget"
+                                self.exitOrder(index, exitType)
+                                Profit_exit_check = True
 
                     else:
                         if df.at[lastIndexTimeData[1], "c"] < open_price and (df.at[lastIndexTimeData[1], "c"] < df_1d.at[prev_day, "l"]):
@@ -199,19 +206,19 @@ class algoLogic(optOverNightAlgoLogic):
                             self.strategyLogger.info(f"{self.humanTime} {baseSym} Exit Signal Triggered: Time Up and Price below Open Price")
 
 
-            # if Profit_exit_check and self.humanTime.time() >= time(15, 20):
-            #     if df.at[lastIndexTimeData[1], "c"] < open_price and (df.at[lastIndexTimeData[1], "c"] < df_1d.at[prev_day, "l"]):
-            #         self.strategyLogger.info(f"{self.humanTime} {baseSym} Profit_exit_check is True")
-            #         Profit_exit_check = False
-            #         exit_signal = False
-            #         Trade_count = 0
-            #         consecutive_green_days = 0
+            if Profit_exit_check and self.humanTime.time() >= time(15, 20):
+                if df.at[lastIndexTimeData[1], "c"] < open_price and (df.at[lastIndexTimeData[1], "c"] < df_1d.at[prev_day, "l"]):
+                    self.strategyLogger.info(f"{self.humanTime} {baseSym} Profit_exit_check is True")
+                    Profit_exit_check = False
+                    exit_signal = False
+                    Trade_count = 0
+                    consecutive_green_days = 0
 
-            #     else:
-            #         entry_price = df.at[lastIndexTimeData[1], "c"]
-            #         self.entryOrder(entry_price, baseSym, (amountPerTrade//entry_price), "BUY", {"TradeType":"Overnight",})
-            #         self.strategyLogger.info(f"{self.humanTime} {baseSym} Profit_exit_check was false. Taking new entry at spot")
-            #         Profit_exit_check = False
+                else:
+                    entry_price = df.at[lastIndexTimeData[1], "c"]
+                    self.entryOrder(entry_price, baseSym, (amountPerTrade//entry_price), "BUY", {"TradeType":"Overnight",})
+                    self.strategyLogger.info(f"{self.humanTime} {baseSym} Profit_exit_check was false. Taking new entry at spot")
+                    Profit_exit_check = False
                         
 
                         # elif (df.at[lastIndexTimeData[1], "c"] > open_price) and (df.at[lastIndexTimeData[1], "c"] > df_1d.at[prev_day, "h"]):
@@ -237,16 +244,16 @@ class algoLogic(optOverNightAlgoLogic):
             if exit_signal == False:
                 if ((timeData-60) in df.index) and Trade_count < 2:
                     if (self.humanTime.time() < time(15, 20)) and Interaday_Trade == False:
-                        if (df.at[lastIndexTimeData[1], "c"] > prev_day_high) and (df.at[lastIndexTimeData[1], "EMA10"] > prev_day_high):
+                        if (df.at[lastIndexTimeData[1], "c"] > prev_day_high):
 
                             entry_price = df.at[lastIndexTimeData[1], "c"]
-                            High_List.append(df.at[lastIndexTimeData[1], "h"]) # not in org
+                            High_List.append(df.at[lastIndexTimeData[1], "h"])
                             
                             self.strategyLogger.info(f"{self.humanTime} {baseSym} Entry Signal Triggered: Green Candle Entry at {entry_price} prev_day_high: {prev_day_high}")
                             self.entryOrder(entry_price, baseSym, (amountPerTrade//entry_price), "BUY", {"TradeType":"Interaday",})
                             Interaday_Trade = True
-                            # if df.at[lastIndexTimeData[1], "o"] > prev_day_high:
-                            #     prev_day_high = df.at[lastIndexTimeData[1], "o"]
+                            if df.at[lastIndexTimeData[1], "o"] > prev_day_high:
+                                prev_day_high = df.at[lastIndexTimeData[1], "c"]
                         
 
                 if ((timeData-60) in df.index) and (self.humanTime.time() >= time(15, 20)) and New_entry:
@@ -314,14 +321,14 @@ if __name__ == "__main__":
 
     # Define Start date and End date
     startDate = datetime(2025, 1, 1, 9, 15)
-    endDate = datetime(2025, 12, 31, 15, 30)
+    endDate = datetime(2025, 11, 30, 15, 30)
 
     # Create algoLogic object
     algo = algoLogic(devName, strategyName, version)
 
     # Define Index Name
-    baseSym = "RELIANCE"
-    indexName = "RELIANCE"
+    baseSym = "HDFCBANK"
+    indexName = "HDFCBANK"
 
     # Execute the algorithm
     closedPnl, fileDir = algo.run(startDate, endDate, baseSym, indexName)
