@@ -84,7 +84,7 @@ class algoLogic(optOverNightAlgoLogic):
         Trade_count = 0
         consecutive_green_days = 0
         New_entry = True
-
+        Gap_up = False
 
 
 
@@ -126,6 +126,9 @@ class algoLogic(optOverNightAlgoLogic):
                     prev_day = prev_day - 86400 
 
                 prev_day_high = df_1d.at[prev_day, "h"]
+
+                if df.at[lastIndexTimeData[1], "c"] > df_1d.at[prev_day, "h"]:
+                    Gap_up = True
 
 
             # if (self.humanTime.time() > time(9, 16)) and (self.humanTime.time() <= time(9, 21)):
@@ -184,7 +187,7 @@ class algoLogic(optOverNightAlgoLogic):
                     # print("current_stock", stock) 
                     if self.humanTime.time() < time(15, 20):
                         if row['TradeType'] == "Interaday":
-                            if (df.at[lastIndexTimeData[1], "c"] < prev_day_high):
+                            if (df.at[lastIndexTimeData[1], "c"] < prev_day_high) and (df.at[lastIndexTimeData[1], "EMA10"] < prev_day_high):
                                 exitType = "Interaday Exit"
                                 self.exitOrder(index, exitType)
                                 exit_signal = False
@@ -245,8 +248,9 @@ class algoLogic(optOverNightAlgoLogic):
                             self.strategyLogger.info(f"{self.humanTime} {baseSym} Entry Signal Triggered: Green Candle Entry at {entry_price} prev_day_high: {prev_day_high}")
                             self.entryOrder(entry_price, baseSym, (amountPerTrade//entry_price), "BUY", {"TradeType":"Interaday",})
                             Interaday_Trade = True
-                            # if df.at[lastIndexTimeData[1], "o"] > prev_day_high:
-                            #     prev_day_high = df.at[lastIndexTimeData[1], "o"]
+                            if Gap_up:
+                                prev_day_high = df.at[lastIndexTimeData[1], "c"]
+                                Gap_up = False
                         
 
                 if ((timeData-60) in df.index) and (self.humanTime.time() >= time(15, 20)) and New_entry:
@@ -320,8 +324,8 @@ if __name__ == "__main__":
     algo = algoLogic(devName, strategyName, version)
 
     # Define Index Name
-    baseSym = "RELIANCE"
-    indexName = "RELIANCE"
+    baseSym = "INFY"
+    indexName = "INFY"
 
     # Execute the algorithm
     closedPnl, fileDir = algo.run(startDate, endDate, baseSym, indexName)
