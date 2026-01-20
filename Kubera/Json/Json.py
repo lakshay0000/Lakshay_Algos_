@@ -187,7 +187,7 @@ def calculate_mtm(closedPnl, saveFileDir, timeFrame="15T", mtm=False, equityMark
 
 
 
-df = pd.read_csv(r'/root/Lakshay_Algos/Kubera/Json/closePnl_NA_FDRS_BN_MW_BaseV1_AvoidUsingTrend_From2020_MnthLt2_WkLt2_10.csv')
+df = pd.read_csv(r'/root/Lakshay_Algos/Kubera/Json/closePnl_NA_FDRS_BN_MW_BaseV1_AvoidUsingTrend_From2020_MnthLt2_WkLt2_12 (2) (1).csv')
 saveFileDir = r'/root/Lakshay_Algos/Kubera/Json'  
 
 

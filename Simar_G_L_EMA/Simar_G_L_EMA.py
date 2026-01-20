@@ -288,7 +288,7 @@ class algoLogic(optOverNightAlgoLogic):
                         state["High"] = max(state["high_list"])
                         state["Low"] = min(state["low_list"])
                         state["Range"] = state["High"]-state["Low"]
-                        self.strategyLogger.info(f"{self.humanTime} {stock} Range: {state['Range']} High: {state['High']} Low: {state['Low']}")
+                        self.strategyLogger.info(f"{self.humanTime} {stock} Range: {state['Range']} High: {state['High']} Low: {state['Low']} {state['high_list']}")
 
                 # Update current price for open positions
                 if not self.openPnl.empty:

@@ -5,13 +5,53 @@ from backtestTools.expiry import getExpiryData
 from datetime import datetime, time, timedelta
 from backtestTools.algoLogic import optOverNightAlgoLogic
 from backtestTools.util import calculateDailyReport, limitCapital, generateReportFile
-from backtestTools.histData import getFnoBacktestData
+from backtestTools.histData import getFnoBacktestData, connectToMongo
+import sys
+import os
 
 # sys.path.insert(1, '/root/backtestTools')
 
 
 # Define a class algoLogic that inherits from optOverNightAlgoLogic
 class algoLogic(optOverNightAlgoLogic):
+    
+
+    def FetchCallPut_df(self, baseSym, df, lastIndexTimeData, Currentexpiry, otmFactor, open_epoch):
+        callSym = self.getCallSym(self.timeData, baseSym, df.at[lastIndexTimeData[1], "c"],expiry= Currentexpiry, otmFactor=otmFactor)
+        
+        try:
+            df_CE = getFnoBacktestData(callSym, open_epoch, open_epoch + 86400, "1Min")
+            self.strategyLogger.info(f"{self.humanTime} {callSym}")
+            df_CE['Symbol'] = callSym
+            df_CE['High'] = df_CE['c'].cummax()
+            df_CE['Low'] = df_CE['c'].cummin()
+            df_CE['range'] = df_CE['High'] - df_CE['Low']
+            df_CE['HRSO'] = ((df_CE['c'] - df_CE['Low']) / df_CE['range'])*100
+            # self.strategyLogger.info(f"{self.humanTime} {callSym} df_CE loaded successfully")
+            self.strategyLogger.info(f"{self.humanTime} {callSym} df_CE:\n{df_CE.head(350).to_string()}")
+        except Exception as e:
+            self.strategyLogger.info(f"{self.humanTime} Error fetching CE data for {callSym} {df_CE}: {str(e)}")
+            df_CE = None
+
+                
+        # Fetch Put DataFrame separately
+        putSym = self.getPutSym(self.timeData, baseSym, df.at[lastIndexTimeData[1], "c"],expiry= Currentexpiry, otmFactor=otmFactor)
+        
+        try:
+            df_PE = getFnoBacktestData(putSym, open_epoch, open_epoch + 86400, "1Min")
+            self.strategyLogger.info(f"{self.humanTime} {putSym}")
+            df_PE['Symbol'] = putSym
+            df_PE['High'] = df_PE['c'].cummax()
+            df_PE['Low'] = df_PE['c'].cummin()
+            df_PE['range'] = df_PE['High'] - df_PE['Low']
+            df_PE['HRSO'] = ((df_PE['c'] - df_PE['Low']) / df_PE['range'])*100
+            # self.strategyLogger.info(f"{self.humanTime} {putSym} df_PE loaded successfully")
+            self.strategyLogger.info(f"{self.humanTime} {putSym} df_PE:\n{df_PE.head(350).to_string()}")
+        except Exception as e:
+            self.strategyLogger.info(f"{self.humanTime} Error fetching PE data for {putSym} {df_PE}: {str(e)}")
+            df_PE = None
+
+        return df_CE,df_PE,callSym,putSym
 
     # Define a method to execute the algorithm
     def run(self, startDate, endDate, baseSym, indexSym):
@@ -75,6 +115,10 @@ class algoLogic(optOverNightAlgoLogic):
         CE_High = 70
         CE_Low = 30
 
+        Symbol_1min_data = {}
+        stock_state = {}
+        otmFactor = 0 
+
 
         
 
@@ -129,52 +173,71 @@ class algoLogic(optOverNightAlgoLogic):
                 PE_Target = False
                 df_CE = None  # Reset for next day
                 df_PE = None  # Reset for next day
+                ATM_stk = None
+                Low_Range = None
+                High_Range = None
+                Symbol_1min_data = {}
+                stock_state = {}
                 
 
             if self.humanTime.date() < (expiryDatetime).date():
                 continue
 
+            if self.humanTime.time() == time(9, 16):
+                open_epoch = lastIndexTimeData[1]
+                self.strategyLogger.info(f"{self.humanTime} otmFactor=otmFactor")
 
-            if self.humanTime.time() >= time(9, 17) and self.humanTime.time() < time(15, 20):
-                if self.humanTime.time() == time(9, 17):
-                    open_epoch = lastIndexTimeData[1]
-                    self.strategyLogger.info(f"{self.humanTime} otmFactor=-2")
+
+            if self.humanTime.time() >= time(9, 21) and self.humanTime.time() < time(15, 20):
+                # if self.humanTime.time() == time(9, 17):
+                #     open_epoch = lastIndexTimeData[1]
+                #     self.strategyLogger.info(f"{self.humanTime} otmFactor=0")
                 
-                # Fetch Call DataFrame separately
-                if df_CE is None:
-                    try:
-                        callSym = self.getCallSym(
-                            self.timeData, baseSym, df.at[lastIndexTimeData[1], "c"],expiry= Currentexpiry, otmFactor=-2)
+                if self.humanTime.time() == time(9, 21):
+                    TsetSym = self.getCallSym(self.timeData, baseSym, df.at[lastIndexTimeData[1], "c"],expiry= Currentexpiry, otmFactor=0)
+                    Low_Range = int(TsetSym[len(TsetSym) - 7:len(TsetSym) - 2]) - 50
+                    High_Range = int(TsetSym[len(TsetSym) - 7:len(TsetSym) - 2]) + 50
+                    self.strategyLogger.info(f"{self.humanTime} Low_Range:{Low_Range} High_Range:{High_Range}")
+                                        
+                    # Fetch Call DataFrame separately
+                    df_CE, df_PE, callSym, putSym = self.FetchCallPut_df(baseSym, df, lastIndexTimeData, Currentexpiry, otmFactor, open_epoch)
+                    
+                    if df_CE is not None:
+                        Symbol_1min_data[callSym] = df_CE
+                        stock_state[callSym] = {"Target": False}
+                    
+                    if df_PE is not None:
+                        Symbol_1min_data[putSym] = df_PE
+                        stock_state[putSym] = {"Target": False}
+
+
+                else:
+                    if lastIndexTimeData[1] in df.index:
+                        CSym = self.getCallSym(self.timeData, baseSym, df.at[lastIndexTimeData[1], "c"],expiry= Currentexpiry, otmFactor=0) 
+                        PSym = self.getPutSym(self.timeData, baseSym, df.at[lastIndexTimeData[1], "c"],expiry= Currentexpiry, otmFactor=0)
+                        stk = int(CSym[len(CSym) - 7:len(CSym) - 2])
                         
-                        df_CE = getFnoBacktestData(callSym, open_epoch, open_epoch + 86400, "1Min")
-                        df_CE['High'] = df_CE['h'].cummax()
-                        df_CE['Low'] = df_CE['l'].cummin()
-                        df_CE['range'] = df_CE['High'] - df_CE['Low']
-                        df_CE['HRSO'] = ((df_CE['c'] - df_CE['Low']) / df_CE['range'])*100
-                        # self.strategyLogger.info(f"{self.humanTime} {callSym} df_CE loaded successfully")
-                        self.strategyLogger.info(f"{self.humanTime} {callSym} df_CE:\n{df_CE.head(350).to_string()}")
-                        
-                    except Exception as e:
-                        self.strategyLogger.info(f"Failed to fetch CE data at {self.humanTime} {callSym}: {e}")
-                        df_CE = None
-                
-                # Fetch Put DataFrame separately
-                if df_PE is None:
-                    try:
-                        putSym = self.getPutSym(
-                            self.timeData, baseSym, df.at[lastIndexTimeData[1], "c"],expiry= Currentexpiry, otmFactor=-2)
-                        
-                        df_PE = getFnoBacktestData(putSym, open_epoch, open_epoch + 86400, "1Min")
-                        df_PE['High'] = df_PE['h'].cummax()
-                        df_PE['Low'] = df_PE['l'].cummin()
-                        df_PE['range'] = df_PE['High'] - df_PE['Low']
-                        df_PE['HRSO'] = ((df_PE['c'] - df_PE['Low']) / df_PE['range'])*100
-                        # self.strategyLogger.info(f"{self.humanTime} {putSym} df_PE loaded successfully")
-                        self.strategyLogger.info(f"{self.humanTime} {putSym} df_PE:\n{df_PE.head(350).to_string()}")
-                        
-                    except Exception as e:
-                        self.strategyLogger.info(f"Failed to fetch PE data at {self.humanTime} {putSym}: {e}")
-                        df_PE = None
+                        if df.at[lastIndexTimeData[1], "c"] <= Low_Range or df.at[lastIndexTimeData[1], "c"] >= High_Range:
+                            Low_Range = stk - 50
+                            High_Range = stk + 50
+                            self.strategyLogger.info(f"{self.humanTime} Low_Range changed to:{Low_Range} High_Range changed to:{High_Range}")
+                            
+                            # Fetch Call DataFrame separately
+                            if CSym not in Symbol_1min_data and PSym not in Symbol_1min_data:
+                                df_CE, df_PE, callSym, putSym = self.FetchCallPut_df(baseSym, df, lastIndexTimeData, Currentexpiry, otmFactor, open_epoch)
+
+                                if df_CE is not None:
+                                    Symbol_1min_data[callSym] = df_CE
+                                    stock_state[callSym] = {"Target": False}
+                                
+                                if df_PE is not None:
+                                    Symbol_1min_data[putSym] = df_PE
+                                    stock_state[putSym] = {"Target": False}
+
+                            # ATM_stk = callSym[len(callSym) - 7:len(callSym) - 2]
+                            # self.strategyLogger.info(f"ATM: {ATM_stk}")
+
+                    
 
                 
                 # pe_prev_day_high = df_1d_PE['h'].max()
@@ -245,9 +308,13 @@ class algoLogic(optOverNightAlgoLogic):
             # Check for exit conditions and execute exit orders
             if not self.openPnl.empty:
                 for index, row in self.openPnl.iterrows():
-
+                    
                     symSide = row["Symbol"]
-                    symSide = symSide[len(symSide) - 2:]      
+                    symSide = symSide[len(symSide) - 2:]  
+
+                    df_opt = Symbol_1min_data.get(row["Symbol"])
+                    state = stock_state[row["Symbol"]]
+
 
                     if self.humanTime.time() >= time(15, 20):
                         exitType = "Time Up"
@@ -255,31 +322,31 @@ class algoLogic(optOverNightAlgoLogic):
 
                     elif symSide == 'CE':
                         if row["CurrentPrice"] <= row["Target"]:
-                            self.openPnl.at[index, "stoploss"] = (df_CE.loc[:lastIndexTimeData[1]-60, 'c'].min())*2
+                            self.openPnl.at[index, "stoploss"] = (df_opt.loc[:lastIndexTimeData[1]-60, 'c'].min())*2
                             self.openPnl.at[index, "Target"] = row["CurrentPrice"]
                             self.strategyLogger.info(f"{self.humanTime} TARGET HIT CE and stoploss shifted to: {self.openPnl.at[index, 'stoploss']}")
                             self.strategyLogger.info(f"Target: {self.openPnl.at[index, 'Target']}")
                             self.strategyLogger.info(f"{self.openPnl[['Symbol', 'Target', 'stoploss']].to_string()}")
-                            CE_Target = True
+                            state["Target"] = True
 
                         elif row["CurrentPrice"] >= row["stoploss"]:
                             exitType = "CE_Stoploss Hit"
                             self.exitOrder(index, exitType)
 
-                        elif (lastIndexTimeData[1] in df_CE.index):
-                            if df_CE.at[lastIndexTimeData[1], "HRSO"] > CE_High:
+                        elif (lastIndexTimeData[1] in df_opt.index):
+                            if df_opt.at[lastIndexTimeData[1], "HRSO"] > CE_High:
                                 exitType = "CE_high_Break"
                                 self.exitOrder(index, exitType)
 
                         
                     elif symSide == 'PE':
                         if row["CurrentPrice"] <= row["Target"]:
-                           self.openPnl.at[index, "stoploss"] = (df_PE.loc[:lastIndexTimeData[1]-60, 'c'].min())*2
+                           self.openPnl.at[index, "stoploss"] = (df_opt.loc[:lastIndexTimeData[1]-60, 'c'].min())*2
                            self.openPnl.at[index, "Target"] = row["CurrentPrice"]
                            self.strategyLogger.info(f"{self.humanTime} TARGET HIT PE and stoploss shifted to: {self.openPnl.at[index, 'stoploss']}")
                            self.strategyLogger.info(f"Target: {self.openPnl.at[index, 'Target']}")
                            self.strategyLogger.info(f"{self.openPnl[['Symbol', 'Target', 'stoploss']].to_string()}")
-                           PE_Target = True
+                           state["Target"] = True
 
 
                         elif row["CurrentPrice"] >= row["stoploss"]:
@@ -287,42 +354,53 @@ class algoLogic(optOverNightAlgoLogic):
                             self.exitOrder(index, exitType)
 
 
-                        elif (lastIndexTimeData[1] in df_PE.index):
-                            if df_PE.at[lastIndexTimeData[1], "HRSO"] > PE_High:
+                        elif (lastIndexTimeData[1] in df_opt.index):
+                            if df_opt.at[lastIndexTimeData[1], "HRSO"] > PE_High:
                                 exitType = "PE_high_Break"
                                 self.exitOrder(index, exitType)
 
 
 
-            tradecount = self.openPnl['Symbol'].str[-2:].value_counts()
-            callCounter= tradecount.get('CE',0)
-            putCounter= tradecount.get('PE',0)
+            # tradecount = self.openPnl['Symbol'].str[-2:].value_counts()
+            # callCounter= tradecount.get('CE',0)
+            # putCounter= tradecount.get('PE',0)
 
 
 
 
             # Check for entry signals and execute orders
-            if ((timeData-60) in df.index) and self.humanTime.time() < time(15, 20) and self.humanTime.time() > time(9, 16):
+            if ((timeData-60) in df.index) and self.humanTime.time() < time(15, 20) and self.humanTime.time() > time(9, 20):
+
+                for symbol, df_opt in Symbol_1min_data.items():
+
+                    if lastIndexTimeData[1] not in df_opt.index:
+                        continue
+                    
+                    state = stock_state[symbol]
+                    # sym = df_opt.at[lastIndexTimeData[1], "Symbol"]
+                    symSide = symbol[len(symbol) - 2:]
+
+                    tradecount = self.openPnl['Symbol'].value_counts()
+                    sym_count = tradecount.get(symbol, 0)
+
                 
-                if df_CE is not None:
-                    if (lastIndexTimeData[1] in df_CE.index) and callCounter < 1:
-                        if df_CE.at[lastIndexTimeData[1], "HRSO"] < CE_Low and CE_Target == False:
+                    if symSide=='CE' and sym_count < 1:
+                        if df_opt.at[lastIndexTimeData[1], "HRSO"] < CE_Low and state["Target"] == False:
 
-                            entry_price = df_CE.at[lastIndexTimeData[1], "c"]
+                            entry_price = df_opt.at[lastIndexTimeData[1], "c"]
                             target = 0.2 * entry_price
                             stoploss = 1.5 * entry_price
 
-                            self.entryOrder(entry_price, callSym, lotSize, "SELL", {"Expiry": expiryEpoch,"Target": target,"stoploss":stoploss},)
+                            self.entryOrder(entry_price, symbol, lotSize, "SELL", {"Expiry": expiryEpoch,"Target": target,"stoploss":stoploss},)
 
-                if df_PE is not None:
-                    if (lastIndexTimeData[1] in df_PE.index) and putCounter < 1:
-                        if df_PE.at[lastIndexTimeData[1], "HRSO"] < PE_Low and PE_Target == False:
+                    if symSide=='PE' and sym_count < 1:
+                        if df_opt.at[lastIndexTimeData[1], "HRSO"] < PE_Low and state["Target"] == False:
                         
-                            entry_price = df_PE.at[lastIndexTimeData[1], "c"]
+                            entry_price = df_opt.at[lastIndexTimeData[1], "c"]
                             target = 0.2 * entry_price
                             stoploss = 1.5 * entry_price
 
-                            self.entryOrder(entry_price, putSym, lotSize, "SELL", {"Expiry": expiryEpoch,"Target": target,"stoploss":stoploss},)
+                            self.entryOrder(entry_price, symbol, lotSize, "SELL", {"Expiry": expiryEpoch,"Target": target,"stoploss":stoploss},)
 
 
 
@@ -332,6 +410,7 @@ class algoLogic(optOverNightAlgoLogic):
         self.combinePnlCsv()
 
         return self.closedPnl, self.fileDir["backtestResultsStrategyUid"]
+    
 
 
 if __name__ == "__main__":
@@ -344,14 +423,14 @@ if __name__ == "__main__":
 
     # Define Start date and End date
     startDate = datetime(2024, 1, 1, 9, 15)
-    endDate = datetime(2025, 12, 31, 15, 30)
+    endDate = datetime(2024, 12, 31, 15, 30)
 
     # Create algoLogic object
     algo = algoLogic(devName, strategyName, version)
 
     # Define Index Name
-    baseSym = "SENSEX"
-    indexName = "SENSEX"
+    baseSym = "NIFTY"
+    indexName = "NIFTY 50"
 
     # Execute the algorithm
     closedPnl, fileDir = algo.run(startDate, endDate, baseSym, indexName)

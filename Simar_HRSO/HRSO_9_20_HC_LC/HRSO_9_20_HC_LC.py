@@ -86,8 +86,8 @@ class algoLogic(optOverNightAlgoLogic):
             print(self.humanTime)
 
             # # Skip the dates 2nd March 2024 and 18th May 2024
-            if self.humanTime.date() == datetime(2024, 1, 5).date():
-                continue
+            # if self.humanTime.date() == datetime(2024, 1, 5).date():
+            #     continue
 
             # Skip time periods outside trading hours
             if (self.humanTime.time() < time(9, 16)) | (self.humanTime.time() > time(15, 30)):
@@ -134,21 +134,25 @@ class algoLogic(optOverNightAlgoLogic):
             if self.humanTime.date() < (expiryDatetime).date():
                 continue
 
+            if self.humanTime.time() == time(9, 16):
+                open_epoch = lastIndexTimeData[1]
+                self.strategyLogger.info(f"{self.humanTime} otmFactor=1")
 
-            if self.humanTime.time() >= time(9, 17) and self.humanTime.time() < time(15, 20):
-                if self.humanTime.time() == time(9, 17):
-                    open_epoch = lastIndexTimeData[1]
-                    self.strategyLogger.info(f"{self.humanTime} otmFactor=-2")
+
+            if self.humanTime.time() >= time(9, 21) and self.humanTime.time() < time(15, 20):
+                # if self.humanTime.time() == time(9, 17):
+                #     open_epoch = lastIndexTimeData[1]
+                #     self.strategyLogger.info(f"{self.humanTime} otmFactor=0")
                 
                 # Fetch Call DataFrame separately
                 if df_CE is None:
                     try:
                         callSym = self.getCallSym(
-                            self.timeData, baseSym, df.at[lastIndexTimeData[1], "c"],expiry= Currentexpiry, otmFactor=-2)
+                            self.timeData, baseSym, df.at[lastIndexTimeData[1], "c"],expiry= Currentexpiry, otmFactor=1)
                         
                         df_CE = getFnoBacktestData(callSym, open_epoch, open_epoch + 86400, "1Min")
-                        df_CE['High'] = df_CE['h'].cummax()
-                        df_CE['Low'] = df_CE['l'].cummin()
+                        df_CE['High'] = df_CE['c'].cummax()
+                        df_CE['Low'] = df_CE['c'].cummin()
                         df_CE['range'] = df_CE['High'] - df_CE['Low']
                         df_CE['HRSO'] = ((df_CE['c'] - df_CE['Low']) / df_CE['range'])*100
                         # self.strategyLogger.info(f"{self.humanTime} {callSym} df_CE loaded successfully")
@@ -162,11 +166,11 @@ class algoLogic(optOverNightAlgoLogic):
                 if df_PE is None:
                     try:
                         putSym = self.getPutSym(
-                            self.timeData, baseSym, df.at[lastIndexTimeData[1], "c"],expiry= Currentexpiry, otmFactor=-2)
+                            self.timeData, baseSym, df.at[lastIndexTimeData[1], "c"],expiry= Currentexpiry, otmFactor=1)
                         
                         df_PE = getFnoBacktestData(putSym, open_epoch, open_epoch + 86400, "1Min")
-                        df_PE['High'] = df_PE['h'].cummax()
-                        df_PE['Low'] = df_PE['l'].cummin()
+                        df_PE['High'] = df_PE['c'].cummax()
+                        df_PE['Low'] = df_PE['c'].cummin()
                         df_PE['range'] = df_PE['High'] - df_PE['Low']
                         df_PE['HRSO'] = ((df_PE['c'] - df_PE['Low']) / df_PE['range'])*100
                         # self.strategyLogger.info(f"{self.humanTime} {putSym} df_PE loaded successfully")
@@ -302,7 +306,7 @@ class algoLogic(optOverNightAlgoLogic):
 
 
             # Check for entry signals and execute orders
-            if ((timeData-60) in df.index) and self.humanTime.time() < time(15, 20) and self.humanTime.time() > time(9, 16):
+            if ((timeData-60) in df.index) and self.humanTime.time() < time(15, 20) and self.humanTime.time() > time(9, 20):
                 
                 if df_CE is not None:
                     if (lastIndexTimeData[1] in df_CE.index) and callCounter < 1:
@@ -343,15 +347,15 @@ if __name__ == "__main__":
     version = "v1"
 
     # Define Start date and End date
-    startDate = datetime(2024, 1, 1, 9, 15)
+    startDate = datetime(2020, 4, 1, 9, 15)
     endDate = datetime(2025, 12, 31, 15, 30)
 
     # Create algoLogic object
     algo = algoLogic(devName, strategyName, version)
 
     # Define Index Name
-    baseSym = "SENSEX"
-    indexName = "SENSEX"
+    baseSym = "NIFTY"
+    indexName = "NIFTY 50"
 
     # Execute the algorithm
     closedPnl, fileDir = algo.run(startDate, endDate, baseSym, indexName)

@@ -290,6 +290,7 @@ class algoLogic(optOverNightAlgoLogic):
                 if (self.humanTime.time() > time(9, 16)) and (self.humanTime.time() <= time(9, 21)):
                     state["high_list"].append(df_1min.at[lastIndexTimeData[1], "h"])
                     state["low_list"].append(df_1min.at[lastIndexTimeData[1], "l"])
+                    self.strategyLogger.info(f"{self.humanTime} {stock} {state['high_list']}")
                     if (self.humanTime.time() == time(9, 21)):
                         state["High"] = max(state["high_list"])
                         state["Low"] = min(state["low_list"])
@@ -297,7 +298,7 @@ class algoLogic(optOverNightAlgoLogic):
                         if state["Range"] < 0.002 * (df_1min.at[lastIndexTimeData[1], "o"]):
                             state["Range"] = 0.002 * (df_1min.at[lastIndexTimeData[1], "o"])
                             self.strategyLogger.info(f"{self.humanTime} {stock} ATR Range too low, setting to 0.2% of open price: {state['Range']}")
-                        self.strategyLogger.info(f"{self.humanTime} {stock} Range: {state['Range']} High: {state['High']} Low: {state['Low']}")
+                        self.strategyLogger.info(f"{self.humanTime} {stock} Range: {state['Range']} High: {state['High']} Low: {state['Low']} {state['high_list']}")
 
                 # Update current price for open positions
                 if not self.openPnl.empty:
