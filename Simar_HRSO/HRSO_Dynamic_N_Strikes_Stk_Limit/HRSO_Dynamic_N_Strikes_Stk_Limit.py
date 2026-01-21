@@ -245,7 +245,8 @@ class algoLogic(optOverNightAlgoLogic):
                     
 
                 
-
+                # pe_prev_day_high = df_1d_PE['h'].max()
+                # pe_prev_day_low = df_1d_PE['l'].min()
                 # ce_prev_day_high = df_1d_CE['h'].max()
                 # ce_prev_day_low = df_1d_CE['l'].min()
                 # self.strategyLogger.info(f"pe_prev_day_high:{pe_prev_day_high}")
