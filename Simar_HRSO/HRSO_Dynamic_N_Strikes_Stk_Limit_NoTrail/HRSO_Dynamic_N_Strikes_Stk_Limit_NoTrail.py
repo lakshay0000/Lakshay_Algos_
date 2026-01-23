@@ -209,7 +209,7 @@ class algoLogic(optOverNightAlgoLogic):
 
         Symbol_1min_data = {}
         stock_state = {}
-        otmFactor = 0 
+        otmFactor = -1
 
         Stk_limit = 0
 
@@ -307,14 +307,16 @@ class algoLogic(optOverNightAlgoLogic):
 
                 else:
                     if lastIndexTimeData[1] in df.index:
-                        CSym = self.getCallSym(self.timeData, baseSym, df.at[lastIndexTimeData[1], "c"],expiry= Currentexpiry, otmFactor=0) 
-                        PSym = self.getPutSym(self.timeData, baseSym, df.at[lastIndexTimeData[1], "c"],expiry= Currentexpiry, otmFactor=0)
-                        stk = int(CSym[len(CSym) - 7:len(CSym) - 2])
+                        TsetSym = self.getCallSym(self.timeData, baseSym, df.at[lastIndexTimeData[1], "c"],expiry= Currentexpiry, otmFactor=0)
+                        stk = int(TsetSym[len(TsetSym) - 7:len(TsetSym) - 2])
                         
                         if df.at[lastIndexTimeData[1], "c"] <= Low_Range or df.at[lastIndexTimeData[1], "c"] >= High_Range:
                             Low_Range = stk - 50
                             High_Range = stk + 50
                             self.strategyLogger.info(f"{self.humanTime} Low_Range changed to:{Low_Range} High_Range changed to:{High_Range}")
+
+                            CSym = self.getCallSym(self.timeData, baseSym, df.at[lastIndexTimeData[1], "c"],expiry= Currentexpiry, otmFactor=otmFactor) 
+                            PSym = self.getPutSym(self.timeData, baseSym, df.at[lastIndexTimeData[1], "c"],expiry= Currentexpiry, otmFactor=otmFactor)
                             
                             # Fetch Call DataFrame separately
                             if CSym not in Symbol_1min_data and PSym not in Symbol_1min_data:
@@ -414,11 +416,13 @@ class algoLogic(optOverNightAlgoLogic):
 
                     elif symSide == 'CE':
                         if row["CurrentPrice"] <= row["Target"]:
-                            self.openPnl.at[index, "stoploss"] = (df_opt.loc[:lastIndexTimeData[1]-60, 'c'].min())*2
-                            self.openPnl.at[index, "Target"] = row["CurrentPrice"]
-                            self.strategyLogger.info(f"{self.humanTime} TARGET HIT CE and stoploss shifted to: {self.openPnl.at[index, 'stoploss']}")
-                            self.strategyLogger.info(f"Target: {self.openPnl.at[index, 'Target']}")
-                            self.strategyLogger.info(f"{self.openPnl[['Symbol', 'Target', 'stoploss']].to_string()}")
+                            exitType = "Target Hit"
+                            # self.openPnl.at[index, "stoploss"] = (df_opt.loc[:lastIndexTimeData[1]-60, 'c'].min())*2
+                            # self.openPnl.at[index, "Target"] = row["CurrentPrice"]
+                            # self.strategyLogger.info(f"{self.humanTime} TARGET HIT CE and stoploss shifted to: {self.openPnl.at[index, 'stoploss']}")
+                            # self.strategyLogger.info(f"Target: {self.openPnl.at[index, 'Target']}")
+                            # self.strategyLogger.info(f"{self.openPnl[['Symbol', 'Target', 'stoploss']].to_string()}")
+                            self.exitOrder(index, exitType)
                             state["Target"] = True
 
                         elif row["CurrentPrice"] >= row["stoploss"]:
@@ -433,11 +437,13 @@ class algoLogic(optOverNightAlgoLogic):
                         
                     elif symSide == 'PE':
                         if row["CurrentPrice"] <= row["Target"]:
-                           self.openPnl.at[index, "stoploss"] = (df_opt.loc[:lastIndexTimeData[1]-60, 'c'].min())*2
-                           self.openPnl.at[index, "Target"] = row["CurrentPrice"]
-                           self.strategyLogger.info(f"{self.humanTime} TARGET HIT PE and stoploss shifted to: {self.openPnl.at[index, 'stoploss']}")
-                           self.strategyLogger.info(f"Target: {self.openPnl.at[index, 'Target']}")
-                           self.strategyLogger.info(f"{self.openPnl[['Symbol', 'Target', 'stoploss']].to_string()}")
+                           exitType = "Target Hit"
+                           #self.openPnl.at[index, "stoploss"] = (df_opt.loc[:lastIndexTimeData[1]-60, 'c'].min())*2
+                           #self.openPnl.at[index, "Target"] = row["CurrentPrice"]
+                           #self.strategyLogger.info(f"{self.humanTime} TARGET HIT PE and stoploss shifted to: {self.openPnl.at[index, 'stoploss']}")
+                           #self.strategyLogger.info(f"Target: {self.openPnl.at[index, 'Target']}")
+                           #self.strategyLogger.info(f"{self.openPnl[['Symbol', 'Target', 'stoploss']].to_string()}")
+                           self.exitOrder(index, exitType)
                            state["Target"] = True
 
 
@@ -479,7 +485,7 @@ class algoLogic(optOverNightAlgoLogic):
                             if df_opt.at[lastIndexTimeData[1], "HRSO"] < CE_Low and state["Target"] == False:
                                 
                                 entry_price = df_opt.at[lastIndexTimeData[1], "c"]
-                                target = 0.2 * entry_price
+                                target = 0.3 * entry_price
                                 stoploss = 1.3 * entry_price
 
                                 # Rolling strategy - maintains exactly 4 positions per side
@@ -491,7 +497,7 @@ class algoLogic(optOverNightAlgoLogic):
                             if df_opt.at[lastIndexTimeData[1], "HRSO"] < PE_Low and state["Target"] == False:
                                 
                                 entry_price = df_opt.at[lastIndexTimeData[1], "c"]
-                                target = 0.2 * entry_price
+                                target = 0.3 * entry_price
                                 stoploss = 1.3 * entry_price
 
                                 # Rolling strategy - maintains exactly 4 positions per side
