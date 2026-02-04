@@ -133,6 +133,17 @@ class algoLogic(optOverNightAlgoLogic):
         EntryAllowed = True
 
 
+        # Skip dates that are not in the allowed list
+        allowed_dates = [
+            datetime(2021, 2, 1).date(),
+            datetime(2022, 2, 1).date(),
+            datetime(2023, 2, 1).date(),
+            datetime(2024, 2, 1).date(),
+            datetime(2024, 7, 23).date(),
+            datetime(2025, 2, 1).date(),
+        ] 
+
+
         
 
         # Loop through each timestamp in the DataFrame index
@@ -187,6 +198,11 @@ class algoLogic(optOverNightAlgoLogic):
                 i = 3
                 pnnl = []
                 i_CanChange = False
+
+
+            # Skip the dates 2nd March 2024 and 18th May 2024
+            if self.humanTime.date() not in allowed_dates:
+                continue
 
 
             # Check if the current time is past the expiry time
@@ -245,10 +261,19 @@ class algoLogic(optOverNightAlgoLogic):
                 for index, row in self.openPnl.iterrows():
 
                     symSide = row["Symbol"]
-                    symSide = symSide[len(symSide) - 2:]      
+                    symSide = symSide[len(symSide) - 2:]     
 
 
-                    if Current_strangle_value >= 1.5 * strangle:
+                    if self.humanTime.time() >= time(15, 20):
+                        exitType = "Time Up"
+                        self.exitOrder(index, exitType)
+                        i = 3
+                        i_CanChange = False
+                        pnnl = []
+                        self.strategyLogger.info(f"i value reset to {i}")
+
+
+                    elif Current_strangle_value >= 1.5 * strangle:
                         exitType = "Combined Loss Exit"
                         pnl = row["Pnl"] 
                         pnnl.append(pnl)
@@ -282,14 +307,6 @@ class algoLogic(optOverNightAlgoLogic):
                             i_CanChange = False
                         
 
-                    elif self.humanTime.time() >= time(15, 20):
-                        exitType = "Time Up"
-                        self.exitOrder(index, exitType)
-                        i = 3
-                        i_CanChange = False
-                        pnnl = []
-                        self.strategyLogger.info(f"i value reset to {i}")
-
                         
 
             # First, check all positions for stoploss
@@ -320,7 +337,7 @@ class algoLogic(optOverNightAlgoLogic):
             # Check for entry signals and execute orders
             if ((timeData-60) in df.index) and self.openPnl.empty and EntryAllowed:
 
-                if self.humanTime.date() == expiryDatetime.date() and self.humanTime.time() >= time(9, 22) and self.humanTime.time() < time(15, 20):
+                if self.humanTime.time() < time(15, 20):
                     straddle_value = self.straddle(lastIndexTimeData[1], df.at[lastIndexTimeData[1], "c"], baseSym)
                     if straddle_value is None:
                         self.strategyLogger.info("Straddle value is None, skipping entry.")
@@ -346,7 +363,7 @@ class algoLogic(optOverNightAlgoLogic):
                         self.strategyLogger.info(e)
 
                     dataCE = data["c"]
-                    CE_stoploss = 2 * data["c"]
+                    CE_stoploss = 1.5 * data["c"]
 
                     # self.entryOrder(dataCE, callSym, lotSize*i, "SELL", {"Expiry": expiryEpoch, "Stoploss": CE_stoploss},)
                     
@@ -366,7 +383,7 @@ class algoLogic(optOverNightAlgoLogic):
                         self.strategyLogger.info(e)
 
                     dataPE = data["c"]
-                    PE_stoploss = 2 * data["c"]
+                    PE_stoploss = 1.5 * data["c"]
 
                     if (dataCE <= 0.5) or (dataPE <= 0.5):
                         self.strategyLogger.info("Data for CE or PE is Less than 0.5 skipping entry.")
@@ -374,9 +391,9 @@ class algoLogic(optOverNightAlgoLogic):
                     
                     strangle = dataCE + dataPE
 
-                    self.entryOrder(dataCE, callSym, lotSize*i, "SELL", {"Expiry": expiryEpoch, "Stoploss": CE_stoploss},)
+                    self.entryOrder(dataCE, callSym, lotSize, "SELL", {"Expiry": expiryEpoch, "Stoploss": CE_stoploss},)
 
-                    self.entryOrder(dataPE, putSym, lotSize*i, "SELL", {"Expiry": expiryEpoch, "Stoploss": PE_stoploss},)
+                    self.entryOrder(dataPE, putSym, lotSize, "SELL", {"Expiry": expiryEpoch, "Stoploss": PE_stoploss},)
                     i_CanChange = True
 
 
@@ -397,8 +414,8 @@ if __name__ == "__main__":
     version = "v1"
 
     # Define Start date and End date
-    startDate = datetime(2020, 4, 1, 9, 15)
-    endDate = datetime(2025, 12, 28, 15, 30)
+    startDate = datetime(2021, 1, 1, 9, 15)
+    endDate = datetime(2026, 2, 28, 15, 30)
 
     # Create algoLogic object
     algo = algoLogic(devName, strategyName, version)

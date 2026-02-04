@@ -5,10 +5,11 @@ import pandas as pd
 from datetime import time, timedelta
 from pandas.api.types import is_datetime64_any_dtype
 from backtestTools.histData import getEquityBacktestData, getFnoBacktestData, connectToMongo
+from backtestTools.util import calculate_mtm
 
 
 
-def calculate_mtm(closedPnl, saveFileDir, timeFrame="15T", mtm=False, equityMarket=True, conn=None):
+def calculate_mtm1(closedPnl, saveFileDir, timeFrame="15T", mtm=False, equityMarket=True, conn=None):
     if conn is None:
         conn = connectToMongo()
 
@@ -187,9 +188,9 @@ def calculate_mtm(closedPnl, saveFileDir, timeFrame="15T", mtm=False, equityMark
 
 
 
-df = pd.read_csv(r'/root/Lakshay_Algos/Kubera/Json/closePnl_NA_FDRS_BN_MW_BaseV1_AvoidUsingTrend_From2020_MnthLt2_WkLt2_12 (2) (1).csv')
+df = pd.read_csv(r'/root/Lakshay_Algos/Kubera/Json/HRSO_N_ALL_FINAL.csv')
 saveFileDir = r'/root/Lakshay_Algos/Kubera/Json'  
 
 
-calculate_mtm(df, saveFileDir, timeFrame=timedelta(minutes=1), mtm=True, equityMarket=False)
+calculate_mtm(df, saveFileDir, timeFrame="1T", mtm=True, equityMarket=False)
 

@@ -216,7 +216,7 @@ class algoLogic(optOverNightAlgoLogic):
                 pnnl_sum = sum(pnnl) 
                 self.strategyLogger.info(f"pnl_sum:{open_sum + pnnl_sum}")
 
-                if (open_sum + pnnl_sum) <= -5000:
+                if (open_sum + pnnl_sum) <= -10000:
                     for index, row in self.openPnl.iterrows():
                         self.exitOrder(index, "MaxLoss")
                         EntryAllowed = False
@@ -225,19 +225,19 @@ class algoLogic(optOverNightAlgoLogic):
                         i_CanChange = False
 
 
-            # # First, check all positions for stoploss
-            # if not self.openPnl.empty and (Stranggle_Exit == False):
-            #     for index, row in self.openPnl.iterrows():
-            #         if row["CurrentPrice"] >= row["Stoploss"]:
-            #             Stranggle_Exit = True
-            #             if i_CanChange:
-            #                 if i < 5:
-            #                     i += 1
-            #                     self.strategyLogger.info(f"i value increased to {i}")
-            #                 else:
-            #                     i = 5
-            #                     self.strategyLogger.info(f"i value remains {i}")
-            #                 i_CanChange = False
+            # First, check all positions for stoploss
+            if not self.openPnl.empty and (Stranggle_Exit == False):
+                for index, row in self.openPnl.iterrows():
+                    if row["CurrentPrice"] >= row["Stoploss"]:
+                        Stranggle_Exit = True
+                        if i_CanChange:
+                            if i < 5:
+                                i += 1
+                                self.strategyLogger.info(f"i value increased to {i}")
+                            else:
+                                i = 5
+                                self.strategyLogger.info(f"i value remains {i}")
+                            i_CanChange = False
 
 
             # Check for exit conditions and execute exit orders
@@ -245,10 +245,19 @@ class algoLogic(optOverNightAlgoLogic):
                 for index, row in self.openPnl.iterrows():
 
                     symSide = row["Symbol"]
-                    symSide = symSide[len(symSide) - 2:]      
+                    symSide = symSide[len(symSide) - 2:]   
 
 
-                    if Current_strangle_value >= 1.5 * strangle:
+                    if self.humanTime.time() >= time(15, 20):
+                        exitType = "Time Up"
+                        self.exitOrder(index, exitType)
+                        i = 3
+                        i_CanChange = False
+                        pnnl = []
+                        self.strategyLogger.info(f"i value reset to {i}")   
+
+
+                    elif Current_strangle_value >= 1.5 * strangle:
                         exitType = "Combined Loss Exit"
                         pnl = row["Pnl"] 
                         pnnl.append(pnl)
@@ -280,31 +289,6 @@ class algoLogic(optOverNightAlgoLogic):
                                 self.strategyLogger.info(f"i value remanins {i}")
 
                             i_CanChange = False
-                        
-
-                    elif self.humanTime.time() >= time(15, 20):
-                        exitType = "Time Up"
-                        self.exitOrder(index, exitType)
-                        i = 3
-                        i_CanChange = False
-                        pnnl = []
-                        self.strategyLogger.info(f"i value reset to {i}")
-
-                        
-
-            # First, check all positions for stoploss
-            if not self.openPnl.empty and (Stranggle_Exit == False):
-                for index, row in self.openPnl.iterrows():
-                    if row["CurrentPrice"] >= row["Stoploss"]:
-                        Stranggle_Exit = True
-                        if i_CanChange:
-                            if i < 5:
-                                i += 1
-                                self.strategyLogger.info(f"i value increased to {i}")
-                            else:
-                                i = 5
-                                self.strategyLogger.info(f"i value remains {i}")
-                            i_CanChange = False
 
 
             if Stranggle_Exit == True:
@@ -320,13 +304,13 @@ class algoLogic(optOverNightAlgoLogic):
             # Check for entry signals and execute orders
             if ((timeData-60) in df.index) and self.openPnl.empty and EntryAllowed:
 
-                if self.humanTime.date() == expiryDatetime.date() and self.humanTime.time() >= time(9, 20) and self.humanTime.time() < time(15, 20):
+                if self.humanTime.time() < time(15, 20):
                     straddle_value = self.straddle(lastIndexTimeData[1], df.at[lastIndexTimeData[1], "c"], baseSym)
                     if straddle_value is None:
                         self.strategyLogger.info("Straddle value is None, skipping entry.")
                         continue
                     self.strategyLogger.info(f"Straddle Value: {straddle_value}")
-                    strangle_value = straddle_value/(i*2)    
+                    strangle_value = straddle_value/(i*2)
                     self.strategyLogger.info(f"Strangle Value: {strangle_value}")
 
                     prmtb = self.OptChain(lastIndexTimeData[1], "CE", df.at[lastIndexTimeData[1], "c"], baseSym)
@@ -368,8 +352,8 @@ class algoLogic(optOverNightAlgoLogic):
                     dataPE = data["c"]
                     PE_stoploss = 2 * data["c"]
 
-                    if (dataCE <= 0.5) or (dataPE <= 0.5):
-                        self.strategyLogger.info("Data for CE or PE is Less than 0.5 skipping entry.")
+                    if (dataCE <= 2) or (dataPE <= 2):
+                        self.strategyLogger.info("Data for CE or PE is Less than 2 skipping entry.")
                         continue
                     
                     strangle = dataCE + dataPE
@@ -397,15 +381,15 @@ if __name__ == "__main__":
     version = "v1"
 
     # Define Start date and End date
-    startDate = datetime(2020, 4, 1, 9, 15)
-    endDate = datetime(2025, 12, 28, 15, 30)
+    startDate = datetime(2024, 7, 23, 9, 15)
+    endDate = datetime(2024, 7, 23, 15, 30)
 
     # Create algoLogic object
     algo = algoLogic(devName, strategyName, version)
 
     # Define Index Name
-    baseSym = "NIFTY"
-    indexName = "NIFTY 50"
+    baseSym = "SENSEX"
+    indexName = "SENSEX"
 
     # Execute the algorithm
     closedPnl, fileDir = algo.run(startDate, endDate, baseSym, indexName)
