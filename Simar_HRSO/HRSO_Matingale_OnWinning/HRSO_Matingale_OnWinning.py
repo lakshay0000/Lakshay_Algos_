@@ -76,15 +76,9 @@ class algoLogic(optOverNightAlgoLogic):
         CE_Low = 30
 
         PE_Ls = 1
-        PE_Inc_Lot_N = True
-
         CE_Ls = 1
-        CE_Inc_Lot_N = True
 
         otmfactor = -1
-
-        PE_Traded = False
-        CE_Traded = False
 
 
 
@@ -137,11 +131,14 @@ class algoLogic(optOverNightAlgoLogic):
                 Currentexpiry = getExpiryData(self.timeData, baseSym)['CurrentExpiry']
                 expiryDatetime = datetime.strptime(Currentexpiry, "%d%b%y").replace(hour=15, minute=20)
                 expiryEpoch= expiryDatetime.timestamp()
-                CE_Target = False
-                PE_Target = False
                 df_CE = None  # Reset for next day
                 df_PE = None  # Reset for next day
-                if PE_Inc_Lot_N and PE_Traded:
+
+                if PE_Target and CE_Target:
+                    PE_Ls=1
+                    CE_Ls=1
+
+                elif PE_Target:
                     if PE_Ls == 2:
                         if CE_Ls<2:
                             CE_Ls = PE_Ls
@@ -149,7 +146,7 @@ class algoLogic(optOverNightAlgoLogic):
                         PE_Ls = PE_Ls*2
                     self.strategyLogger.info(f"{self.humanTime} PE Lotsize updated = {lotSize*PE_Ls}")
 
-                if CE_Inc_Lot_N and CE_Traded:
+                elif CE_Target:
                     if CE_Ls == 2:
                         if PE_Ls<2:
                             PE_Ls = CE_Ls
@@ -158,10 +155,8 @@ class algoLogic(optOverNightAlgoLogic):
                     self.strategyLogger.info(f"{self.humanTime} PE Lotsize updated = {lotSize*CE_Ls}")
                 
                 # Set flags true for next expiry to double the lot size
-                PE_Inc_Lot_N = True
-                CE_Inc_Lot_N = True
-                PE_Traded = False
-                CE_Traded = False
+                CE_Target = False
+                PE_Target = False
 
 
                 
@@ -299,8 +294,6 @@ class algoLogic(optOverNightAlgoLogic):
                             self.strategyLogger.info(f"Target: {self.openPnl.at[index, 'Target']}")
                             self.strategyLogger.info(f"{self.openPnl[['Symbol', 'Target', 'stoploss']].to_string()}")
                             CE_Target = True
-                            CE_Inc_Lot_N = False
-                            CE_Ls = 1
 
 
                         elif row["CurrentPrice"] >= row["stoploss"]:
@@ -326,8 +319,6 @@ class algoLogic(optOverNightAlgoLogic):
                             self.strategyLogger.info(f"Target: {self.openPnl.at[index, 'Target']}")
                             self.strategyLogger.info(f"{self.openPnl[['Symbol', 'Target', 'stoploss']].to_string()}")
                             PE_Target = True
-                            PE_Inc_Lot_N = False
-                            PE_Ls = 1
                             
 
                         elif row["CurrentPrice"] >= row["stoploss"]:
@@ -346,7 +337,14 @@ class algoLogic(optOverNightAlgoLogic):
             callCounter= tradecount.get('CE',0)
             putCounter= tradecount.get('PE',0)
 
+            # if self.humanTime.time() > time(15, 20):
+            #     if CE_Target == False:
+            #         CE_Ls=1
 
+            #     if PE_Target == False:
+            #         PE_Ls=1
+                    
+                    
 
 
             # Check for entry signals and execute orders
@@ -361,7 +359,6 @@ class algoLogic(optOverNightAlgoLogic):
                             stoploss = 1.5 * entry_price
 
                             self.entryOrder(entry_price, callSym, lotSize*CE_Ls, "SELL", {"Expiry": expiryEpoch,"Target": target,"stoploss":stoploss},)
-                            CE_Traded = True
 
                 if df_PE is not None:
                     if (lastIndexTimeData[1] in df_PE.index) and putCounter < 1:
@@ -372,7 +369,6 @@ class algoLogic(optOverNightAlgoLogic):
                             stoploss = 1.5 * entry_price
 
                             self.entryOrder(entry_price, putSym, lotSize*PE_Ls, "SELL", {"Expiry": expiryEpoch,"Target": target,"stoploss":stoploss},)
-                            PE_Traded = True
 
 
 
