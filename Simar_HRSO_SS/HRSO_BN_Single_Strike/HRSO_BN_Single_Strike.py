@@ -1,7 +1,6 @@
 import numpy as np
 import talib as ta
 import pandas_ta as taa
-import pandas as pd
 from backtestTools.expiry import getExpiryData
 from datetime import datetime, time, timedelta
 from backtestTools.algoLogic import optOverNightAlgoLogic
@@ -57,7 +56,7 @@ class algoLogic(optOverNightAlgoLogic):
 
         lastIndexTimeData = [0, 0]
 
-        Currentexpiry = getExpiryData(startEpoch, baseSym)['CurrentExpiry']
+        Currentexpiry = getExpiryData(startEpoch, baseSym)['MonthlyExpiry']
         expiryDatetime = datetime.strptime(Currentexpiry, "%d%b%y").replace(hour=15, minute=20)
         expiryEpoch= expiryDatetime.timestamp()
         lotSize = int(getExpiryData(self.timeData, baseSym)["LotSize"])
@@ -76,12 +75,7 @@ class algoLogic(optOverNightAlgoLogic):
         CE_High = 70
         CE_Low = 30
 
-        PE_Ls = 1
-        CE_Ls = 1
-        MaxLoss_Hit = False
-
         otmfactor = -1
-
 
 
         
@@ -94,8 +88,8 @@ class algoLogic(optOverNightAlgoLogic):
             print(self.humanTime)
 
             # # Skip the dates 2nd March 2024 and 18th May 2024
-            # if self.humanTime.date() == datetime(2025, 4, 7).date() or self.humanTime.date() == datetime(2025, 6, 16).date():
-            #     continue
+            if self.humanTime.date() == datetime(2024, 1, 5).date():
+                continue
 
             # Skip time periods outside trading hours
             if (self.humanTime.time() < time(9, 16)) | (self.humanTime.time() > time(15, 30)):
@@ -130,38 +124,13 @@ class algoLogic(optOverNightAlgoLogic):
             
 
             if self.humanTime.date() > expiryDatetime.date():
-                Currentexpiry = getExpiryData(self.timeData, baseSym)['CurrentExpiry']
+                Currentexpiry = getExpiryData(self.timeData, baseSym)['MonthlyExpiry']
                 expiryDatetime = datetime.strptime(Currentexpiry, "%d%b%y").replace(hour=15, minute=20)
                 expiryEpoch= expiryDatetime.timestamp()
-                df_CE = None  # Reset for next day
-                df_PE = None  # Reset for next day
-
-                if PE_Target and CE_Target:
-                    PE_Ls=1
-                    CE_Ls=1
-
-                elif PE_Target:
-                    if PE_Ls == 2:
-                        if CE_Ls<2:
-                            CE_Ls = PE_Ls
-                    else:
-                        PE_Ls = PE_Ls*2
-                    self.strategyLogger.info(f"{self.humanTime} PE Lotsize updated = {lotSize*PE_Ls}")
-
-                elif CE_Target:
-                    if CE_Ls == 2:
-                        if PE_Ls<2:
-                            PE_Ls = CE_Ls
-                    else:
-                        CE_Ls = CE_Ls*2
-                    self.strategyLogger.info(f"{self.humanTime} PE Lotsize updated = {lotSize*CE_Ls}")
-                
-                # Set flags true for next expiry to double the lot size
                 CE_Target = False
                 PE_Target = False
-                MaxLoss_Hit = False
-
-
+                df_CE = None  # Reset for next day
+                df_PE = None  # Reset for next day
                 
 
             if self.humanTime.date() < (expiryDatetime).date():
@@ -272,22 +241,6 @@ class algoLogic(optOverNightAlgoLogic):
             #     if (lastIndexTimeData[1] in df_CE.index):
 
 
-            # if not self.openPnl.empty:
-            #     open_sum = int(self.openPnl['Pnl'].sum())
-
-            #     self.closedPnl['ExitTime'] = pd.to_datetime(self.closedPnl['ExitTime'])
-            #     currentDayClosedPnl = self.closedPnl[self.closedPnl['ExitTime'].dt.date == self.humanTime.date()]
-            #     close_sum = int(currentDayClosedPnl['Pnl'].sum())
-
-            #     self.strategyLogger.info(f"{self.humanTime} pnl_sum:{open_sum + close_sum}")
-
-            #     if (open_sum + close_sum) < -10000:
-            #         for index, row in self.openPnl.iterrows():
-            #             self.exitOrder(index, "MaxLoss")
-
-            #         MaxLoss_Hit = True
-
-
 
             # Check for exit conditions and execute exit orders
             if not self.openPnl.empty:
@@ -301,11 +254,6 @@ class algoLogic(optOverNightAlgoLogic):
                         self.exitOrder(index, exitType)
 
                     elif symSide == 'CE':
-                        if CE_Target == False and row["CurrentPrice"] <= row["EntryPrice"]*0.5:
-                            self.openPnl.at[index, "stoploss"] = row["EntryPrice"]
-                            self.strategyLogger.info(f"{self.humanTime} stoploss shifted to breakeven: {self.openPnl.at[index, 'stoploss']}")
-                            self.strategyLogger.info(f"{self.openPnl[['Symbol', 'Target', 'stoploss']].to_string()}")
-
                         if row["CurrentPrice"] <= row["Target"]:
                             self.openPnl.at[index, "stoploss"] = (df_CE.loc[:lastIndexTimeData[1]-60, 'c'].min())*2
                             self.openPnl.at[index, "Target"] = row["CurrentPrice"]
@@ -313,7 +261,6 @@ class algoLogic(optOverNightAlgoLogic):
                             self.strategyLogger.info(f"Target: {self.openPnl.at[index, 'Target']}")
                             self.strategyLogger.info(f"{self.openPnl[['Symbol', 'Target', 'stoploss']].to_string()}")
                             CE_Target = True
-
 
                         elif row["CurrentPrice"] >= row["stoploss"]:
                             exitType = "CE_Stoploss Hit"
@@ -326,19 +273,14 @@ class algoLogic(optOverNightAlgoLogic):
 
                         
                     elif symSide == 'PE':
-                        if PE_Target == False and row["CurrentPrice"] <= row["EntryPrice"]*0.5:
-                            self.openPnl.at[index, "stoploss"] = row["EntryPrice"]
-                            self.strategyLogger.info(f"{self.humanTime} stoploss shifted to breakeven: {self.openPnl.at[index, 'stoploss']}")
-                            self.strategyLogger.info(f"{self.openPnl[['Symbol', 'Target', 'stoploss']].to_string()}")
-
                         if row["CurrentPrice"] <= row["Target"]:
-                            self.openPnl.at[index, "stoploss"] = (df_PE.loc[:lastIndexTimeData[1]-60, 'c'].min())*2
-                            self.openPnl.at[index, "Target"] = row["CurrentPrice"]
-                            self.strategyLogger.info(f"{self.humanTime} TARGET HIT PE and stoploss shifted to: {self.openPnl.at[index, 'stoploss']}")
-                            self.strategyLogger.info(f"Target: {self.openPnl.at[index, 'Target']}")
-                            self.strategyLogger.info(f"{self.openPnl[['Symbol', 'Target', 'stoploss']].to_string()}")
-                            PE_Target = True
-                            
+                           self.openPnl.at[index, "stoploss"] = (df_PE.loc[:lastIndexTimeData[1]-60, 'c'].min())*2
+                           self.openPnl.at[index, "Target"] = row["CurrentPrice"]
+                           self.strategyLogger.info(f"{self.humanTime} TARGET HIT PE and stoploss shifted to: {self.openPnl.at[index, 'stoploss']}")
+                           self.strategyLogger.info(f"Target: {self.openPnl.at[index, 'Target']}")
+                           self.strategyLogger.info(f"{self.openPnl[['Symbol', 'Target', 'stoploss']].to_string()}")
+                           PE_Target = True
+
 
                         elif row["CurrentPrice"] >= row["stoploss"]:
                             exitType = "PE_Stoploss Hit"
@@ -356,18 +298,11 @@ class algoLogic(optOverNightAlgoLogic):
             callCounter= tradecount.get('CE',0)
             putCounter= tradecount.get('PE',0)
 
-            # if self.humanTime.time() > time(15, 20):
-            #     if CE_Target == False:
-            #         CE_Ls=1
 
-            #     if PE_Target == False:
-            #         PE_Ls=1
-                    
-                    
 
 
             # Check for entry signals and execute orders
-            if ((timeData-60) in df.index) and self.humanTime.time() < time(15, 20) and self.humanTime.time() > time(9, 16) and MaxLoss_Hit == False:
+            if ((timeData-60) in df.index) and self.humanTime.time() < time(15, 20) and self.humanTime.time() > time(9, 16):
                 
                 if df_CE is not None:
                     if (lastIndexTimeData[1] in df_CE.index) and callCounter < 1:
@@ -377,7 +312,7 @@ class algoLogic(optOverNightAlgoLogic):
                             target = 0.2 * entry_price
                             stoploss = 1.5 * entry_price
 
-                            self.entryOrder(entry_price, callSym, lotSize*CE_Ls, "SELL", {"Expiry": expiryEpoch,"Target": target,"stoploss":stoploss},)
+                            self.entryOrder(entry_price, callSym, lotSize, "SELL", {"Expiry": expiryEpoch,"Target": target,"stoploss":stoploss},)
 
                 if df_PE is not None:
                     if (lastIndexTimeData[1] in df_PE.index) and putCounter < 1:
@@ -387,7 +322,7 @@ class algoLogic(optOverNightAlgoLogic):
                             target = 0.2 * entry_price
                             stoploss = 1.5 * entry_price
 
-                            self.entryOrder(entry_price, putSym, lotSize*PE_Ls, "SELL", {"Expiry": expiryEpoch,"Target": target,"stoploss":stoploss},)
+                            self.entryOrder(entry_price, putSym, lotSize, "SELL", {"Expiry": expiryEpoch,"Target": target,"stoploss":stoploss},)
 
 
 
@@ -408,15 +343,15 @@ if __name__ == "__main__":
     version = "v1"
 
     # Define Start date and End date
-    startDate = datetime(2025, 1, 1, 9, 15)
+    startDate = datetime(2023, 1, 1, 9, 15)
     endDate = datetime(2025, 12, 31, 15, 30)
 
     # Create algoLogic object
     algo = algoLogic(devName, strategyName, version)
 
     # Define Index Name
-    baseSym = "NIFTY"
-    indexName = "NIFTY 50"
+    baseSym = "BANKNIFTY"
+    indexName = "NIFTY BANK"
 
     # Execute the algorithm
     closedPnl, fileDir = algo.run(startDate, endDate, baseSym, indexName)

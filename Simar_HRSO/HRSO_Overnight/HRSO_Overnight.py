@@ -156,7 +156,7 @@ class algoLogic(optOverNightAlgoLogic):
                         callSym = self.getCallSym(
                             self.timeData, baseSym, df.at[lastIndexTimeData[1], "c"],expiry= Currentexpiry, otmFactor=otmfactor)
                         
-                        df_CE = getFnoBacktestData(callSym, open_epoch - 86400, open_epoch + 86400*(days_left+1), "1Min")
+                        df_CE = getFnoBacktestData(callSym, open_epoch - (86400*5), open_epoch + 86400*(days_left+1), "1Min")
                         # Calculate RSI indicator
                         df_CE["rsi"] = ta.RSI(df_CE["c"], timeperiod=7)
                         df_CE.dropna(inplace=True)
@@ -182,7 +182,7 @@ class algoLogic(optOverNightAlgoLogic):
                         putSym = self.getPutSym(
                             self.timeData, baseSym, df.at[lastIndexTimeData[1], "c"],expiry= Currentexpiry, otmFactor=otmfactor)
                         
-                        df_PE = getFnoBacktestData(putSym, open_epoch - 86400, open_epoch + 86400*(days_left+1), "1Min")
+                        df_PE = getFnoBacktestData(putSym, open_epoch - (86400*5), open_epoch + 86400*(days_left+1), "1Min")
                         # Calculate RSI indicator
                         df_PE["rsi"] = ta.RSI(df_PE["c"], timeperiod=7)
                         df_PE.dropna(inplace=True)

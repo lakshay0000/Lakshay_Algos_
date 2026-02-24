@@ -48,8 +48,9 @@ class algoLogic(optOverNightAlgoLogic):
 
         return prm
     
-    def OptChain(self, date, symbol, IndexPrice, baseSym):
+    def OptChain(self, date, symbol, IndexPrice, baseSym, Strangle_data):
         prmtb=[]
+        strike=[]
         if (symbol== "CE"):
             for i in range(0,20):
                 callSymotm = self.getCallSym(date, baseSym, IndexPrice, otmFactor=i)         
@@ -57,14 +58,10 @@ class algoLogic(optOverNightAlgoLogic):
                     data = self.fetchAndCacheFnoHistData(
                         callSymotm, date)
                     prmtb.append(data["c"])
+                    strike.append(callSymotm)
                 except Exception as e:
                     self.strategyLogger.info(e)
-                
-                # callstrikeP= callSymotm[len(callSymotm) - 7:len(callSymotm) - 2]
-                # callstrikep=float(callstrikeP)
-
-                # prmtb.append(data["c"])   
-                # stike.append(callstrikep)    
+                   
 
         if (symbol== "PE"):
             for i in range(0,20):
@@ -73,23 +70,19 @@ class algoLogic(optOverNightAlgoLogic):
                     data = self.fetchAndCacheFnoHistData(
                         putSymotm, date)
                     prmtb.append(data["c"])
+                    strike.append(putSymotm)
                 except Exception as e:
                     self.strategyLogger.info(e)
 
-                # putstrikeP= putSymotm[len(putSymotm) - 7:len(putSymotm) - 2]
-                # putstrikep=float(putstrikeP)
+        nearest_premium = min(prmtb, key=lambda x: abs(x - Strangle_data))
+        premium_index = prmtb.index(nearest_premium)
+        Sym = strike[premium_index]  
 
-                # prmtb.append(data["c"])
-                # stike.append(putstrikep)
+        self.strategyLogger.info(f"Premium List: {prmtb} selected premium: {nearest_premium} at OTM: {premium_index}")
+        self.strategyLogger.info(f"Strike List: {strike} selected Strike: {Sym}")
 
-        return prmtb
+        return Sym
         
-    def Otmfactor(self, premiumlst, data):
-        nearest_premium = min(premiumlst, key=lambda x: abs(x - data))
-        premium_index = premiumlst.index(nearest_premium)
-        otmfactor= premium_index
-
-        return otmfactor
 
     # Define a method to execute the algorithm
     def run(self, startDate, endDate, baseSym, indexSym):
@@ -131,17 +124,6 @@ class algoLogic(optOverNightAlgoLogic):
         prev_day = None
         pnnl=[]
         EntryAllowed = True
-
-
-        # Skip dates that are not in the allowed list
-        allowed_dates = [
-            datetime(2021, 2, 1).date(),
-            datetime(2022, 2, 1).date(),
-            datetime(2023, 2, 1).date(),
-            datetime(2024, 2, 1).date(),
-            datetime(2024, 7, 23).date(),
-            datetime(2025, 2, 1).date(),
-        ] 
 
 
         
@@ -200,11 +182,6 @@ class algoLogic(optOverNightAlgoLogic):
                 i_CanChange = False
 
 
-            # Skip the dates 2nd March 2024 and 18th May 2024
-            if self.humanTime.date() not in allowed_dates:
-                continue
-
-
             # Check if the current time is past the expiry time
             # if prev_day is None:
             #     prev_day = expiryEpoch - 86400
@@ -261,19 +238,10 @@ class algoLogic(optOverNightAlgoLogic):
                 for index, row in self.openPnl.iterrows():
 
                     symSide = row["Symbol"]
-                    symSide = symSide[len(symSide) - 2:]     
+                    symSide = symSide[len(symSide) - 2:]      
 
 
-                    if self.humanTime.time() >= time(15, 20):
-                        exitType = "Time Up"
-                        self.exitOrder(index, exitType)
-                        i = 3
-                        i_CanChange = False
-                        pnnl = []
-                        self.strategyLogger.info(f"i value reset to {i}")
-
-
-                    elif Current_strangle_value >= 1.5 * strangle:
+                    if Current_strangle_value >= 1.5 * strangle:
                         exitType = "Combined Loss Exit"
                         pnl = row["Pnl"] 
                         pnnl.append(pnl)
@@ -307,6 +275,14 @@ class algoLogic(optOverNightAlgoLogic):
                             i_CanChange = False
                         
 
+                    elif self.humanTime.time() >= time(15, 20):
+                        exitType = "Time Up"
+                        self.exitOrder(index, exitType)
+                        i = 3
+                        i_CanChange = False
+                        pnnl = []
+                        self.strategyLogger.info(f"i value reset to {i}")
+
                         
 
             # First, check all positions for stoploss
@@ -337,7 +313,7 @@ class algoLogic(optOverNightAlgoLogic):
             # Check for entry signals and execute orders
             if ((timeData-60) in df.index) and self.openPnl.empty and EntryAllowed:
 
-                if self.humanTime.time() < time(15, 20):
+                if self.humanTime.date() == expiryDatetime.date() and self.humanTime.time() < time(15, 20):
                     straddle_value = self.straddle(lastIndexTimeData[1], df.at[lastIndexTimeData[1], "c"], baseSym)
                     if straddle_value is None:
                         self.strategyLogger.info("Straddle value is None, skipping entry.")
@@ -346,13 +322,8 @@ class algoLogic(optOverNightAlgoLogic):
                     strangle_value = straddle_value/(i*2)    
                     self.strategyLogger.info(f"Strangle Value: {strangle_value}")
 
-                    prmtb = self.OptChain(lastIndexTimeData[1], "CE", df.at[lastIndexTimeData[1], "c"], baseSym)
-                    self.strategyLogger.info(f"Premium List: {prmtb}")
-                    otmfactorCE = self.Otmfactor(prmtb, strangle_value)
-                    self.strategyLogger.info(f"OTM Factor for CE: {otmfactorCE}")
-
-                    callSym = self.getCallSym(
-                        self.timeData, baseSym, df.at[lastIndexTimeData[1], "c"],expiry= Currentexpiry, otmFactor=otmfactorCE)
+                    callSym = self.OptChain(lastIndexTimeData[1], "CE", df.at[lastIndexTimeData[1], "c"], baseSym, strangle_value)
+                    self.strategyLogger.info(f"Callsym: {callSym}")
                     
                     St_CallSym = callSym
 
@@ -363,16 +334,12 @@ class algoLogic(optOverNightAlgoLogic):
                         self.strategyLogger.info(e)
 
                     dataCE = data["c"]
-                    CE_stoploss = 1.5 * data["c"]
+                    CE_stoploss = 2 * data["c"]
 
                     # self.entryOrder(dataCE, callSym, lotSize*i, "SELL", {"Expiry": expiryEpoch, "Stoploss": CE_stoploss},)
                     
-                    prmtb = self.OptChain(lastIndexTimeData[1], "PE", df.at[lastIndexTimeData[1], "c"], baseSym)
-                    self.strategyLogger.info(f"Premium List: {prmtb}")
-                    otmfactorPE = self.Otmfactor(prmtb, strangle_value)
-                    self.strategyLogger.info(f"OTM Factor for PE: {otmfactorPE}")
-                    putSym = self.getPutSym(
-                        self.timeData, baseSym, df.at[lastIndexTimeData[1], "c"],expiry= Currentexpiry, otmFactor=otmfactorPE)
+                    putSym = self.OptChain(lastIndexTimeData[1], "PE", df.at[lastIndexTimeData[1], "c"], baseSym, strangle_value)
+                    self.strategyLogger.info(f"PutSym: {putSym}")
 
                     St_PutSym = putSym
 
@@ -383,7 +350,7 @@ class algoLogic(optOverNightAlgoLogic):
                         self.strategyLogger.info(e)
 
                     dataPE = data["c"]
-                    PE_stoploss = 1.5 * data["c"]
+                    PE_stoploss = 2 * data["c"]
 
                     if (dataCE <= 0.5) or (dataPE <= 0.5):
                         self.strategyLogger.info("Data for CE or PE is Less than 0.5 skipping entry.")
@@ -391,9 +358,9 @@ class algoLogic(optOverNightAlgoLogic):
                     
                     strangle = dataCE + dataPE
 
-                    self.entryOrder(dataCE, callSym, lotSize, "SELL", {"Expiry": expiryEpoch, "Stoploss": CE_stoploss},)
+                    self.entryOrder(dataCE, callSym, lotSize*i, "SELL", {"Expiry": expiryEpoch, "Stoploss": CE_stoploss},)
 
-                    self.entryOrder(dataPE, putSym, lotSize, "SELL", {"Expiry": expiryEpoch, "Stoploss": PE_stoploss},)
+                    self.entryOrder(dataPE, putSym, lotSize*i, "SELL", {"Expiry": expiryEpoch, "Stoploss": PE_stoploss},)
                     i_CanChange = True
 
 
@@ -414,8 +381,8 @@ if __name__ == "__main__":
     version = "v1"
 
     # Define Start date and End date
-    startDate = datetime(2021, 1, 1, 9, 15)
-    endDate = datetime(2026, 2, 28, 15, 30)
+    startDate = datetime(2020, 4, 1, 9, 15)
+    endDate = datetime(2025, 12, 31, 15, 30)
 
     # Create algoLogic object
     algo = algoLogic(devName, strategyName, version)

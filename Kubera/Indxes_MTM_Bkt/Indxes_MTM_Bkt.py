@@ -103,6 +103,7 @@ class algoLogic(optOverNightAlgoLogic):
 
             if (self.humanTime.time() == time(9, 16)):
                 MainTrade=True
+                Entry_Allowed = True
 
 
             # Update current price for open positions
@@ -126,17 +127,16 @@ class algoLogic(optOverNightAlgoLogic):
                     if self.humanTime.time() >= time(15, 20):
                         exitType = "Time Up"
                         self.exitOrder(index, exitType)
-                        MidDay=False
 
-                    elif df.at[lastIndexTimeData[1], "mtmPnl"] < -1000:
+                    elif df.at[lastIndexTimeData[1], "mtmPnl"] < -10000:
                         exitType = "stoploss"
                         self.exitOrder(index, exitType)
-                        MidDay=False
+                        Entry_Allowed = False
 
 
             # Check for entry signals and execute orders
 
-            if ((timeData-60) in df.index) and self.openPnl.empty and (self.humanTime.time() < time(15, 20)):
+            if ((timeData-60) in df.index) and self.openPnl.empty and (self.humanTime.time() < time(15, 20)) and (self.humanTime.time() > time(9, 16)) and Entry_Allowed:
 
                 if MainTrade:
                     entry_price = df.at[lastIndexTimeData[1], "mtmPnl"]
@@ -144,7 +144,7 @@ class algoLogic(optOverNightAlgoLogic):
                     self.entryOrder(entry_price, baseSym, 1, "BUY")
                     MainTrade=False
 
-                elif not MainTrade and df.at[lastIndexTimeData[1], "mtmPnl"] > 0:
+                elif not MainTrade and df.at[lastIndexTimeData[1], "mtmPnl"] > 0:  
                     
                     entry_price = df.at[lastIndexTimeData[1], "mtmPnl"]
 
@@ -168,15 +168,15 @@ if __name__ == "__main__":
     version = "v1"
 
     # Define Start date and End date
-    startDate = datetime(2024, 1, 2, 9, 15)
-    endDate = datetime(2024, 12, 31, 15, 30)
+    startDate = datetime(2023, 1, 2, 9, 15)
+    endDate = datetime(2025, 12, 31, 15, 30)
 
     # Create algoLogic object
     algo = algoLogic(devName, strategyName, version)
 
     # Define Index Name
-    baseSym = "EquityMTM"
-    indexName = "EquityMTM"
+    baseSym = "OptionMTM"
+    indexName = "OptionMTM"
 
     # Execute the algorithm
     closedPnl, fileDir = algo.run(startDate, endDate, baseSym, indexName)

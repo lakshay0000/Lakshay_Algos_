@@ -80,7 +80,8 @@ class algoLogic(optOverNightAlgoLogic):
         CE_Ls = 1
         MaxLoss_Hit = False
 
-        otmfactor = -1
+        otmfactor = 1
+        
 
 
 
@@ -94,8 +95,8 @@ class algoLogic(optOverNightAlgoLogic):
             print(self.humanTime)
 
             # # Skip the dates 2nd March 2024 and 18th May 2024
-            # if self.humanTime.date() == datetime(2025, 4, 7).date() or self.humanTime.date() == datetime(2025, 6, 16).date():
-            #     continue
+            if self.humanTime.date() == datetime(2024, 1, 5).date():
+                continue
 
             # Skip time periods outside trading hours
             if (self.humanTime.time() < time(9, 16)) | (self.humanTime.time() > time(15, 30)):
@@ -408,15 +409,15 @@ if __name__ == "__main__":
     version = "v1"
 
     # Define Start date and End date
-    startDate = datetime(2025, 1, 1, 9, 15)
+    startDate = datetime(2024, 1, 1, 9, 15)
     endDate = datetime(2025, 12, 31, 15, 30)
 
     # Create algoLogic object
     algo = algoLogic(devName, strategyName, version)
 
     # Define Index Name
-    baseSym = "NIFTY"
-    indexName = "NIFTY 50"
+    baseSym = "SENSEX"
+    indexName = "SENSEX"
 
     # Execute the algorithm
     closedPnl, fileDir = algo.run(startDate, endDate, baseSym, indexName)

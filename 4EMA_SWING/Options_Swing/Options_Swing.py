@@ -127,7 +127,7 @@ class algoLogic(optOverNightAlgoLogic):
                 last15MinIndexTimeData.append(timeData-900)
 
             # Strategy Specific Trading Time
-            if (self.humanTime.time() < time(9, 16)) | (self.humanTime.time() > time(15, 30)):
+            if (self.humanTime.time() < time(9, 16)) | (self.humanTime.time() > time(15, 25)):
                 continue
 
             #  # Log relevant information

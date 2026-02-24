@@ -308,19 +308,16 @@ class algoLogic(optOverNightAlgoLogic):
                 currentDayClosedPnl = self.closedPnl[self.closedPnl['ExitTime'].dt.date == self.humanTime.date()]
                 DayValue = int(currentDayClosedPnl['Pnl'].sum())
 
-                if DayValue < 0:
-                    if Losing_day<2:
-                        n = n+1
-                    else:
-                        n=6
-                    
-                    Losing_day += 1
-                    self.strategyLogger.info(f"{self.humanTime} LossingDay Detected {Losing_day}: lot size mutltiple {n}")
-
-                else:
+                if DayValue > 0:
+                    n=2
                     Losing_day=0
-                    n=1
+                else:
+                    if Losing_day ==0:
+                        n=1
+                    else:
+                        n=2
 
+                    Losing_day += 1
 
 
             # Check for entry signals and execute orders
@@ -365,7 +362,7 @@ if __name__ == "__main__":
     version = "v1"
 
     # Define Start date and End date
-    startDate = datetime(2020, 4, 1, 9, 15)
+    startDate = datetime(2023, 1, 1, 9, 15)
     endDate = datetime(2025, 12, 31, 15, 30)
 
     # Create algoLogic object

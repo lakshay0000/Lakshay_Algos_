@@ -14,8 +14,54 @@ from backtestTools.histData import getFnoBacktestData
 # Define a class algoLogic that inherits from optOverNightAlgoLogic
 class algoLogic(optOverNightAlgoLogic):
 
+    def findValidOptionSymbol(self, symbolType, IndexPrice, entry_price, baseSym, lastIndexTimeData, Currentexpiry, otmFactor_start):
+            """
+            Find a valid option symbol with price in range [50, 150].
+            
+            Args:
+                symbolType: "CALL" or "PUT"
+                entry_price: Current entry price
+                baseSym: Base symbol (e.g., "NIFTY")
+                lastIndexTimeData: Last index time data
+                Currentexpiry: Current expiry date
+                otmFactor_start: Starting OTM factor (-1)
+            
+            Returns:
+                tuple: (symbol, data["c"]) or (None, None) if not found
+            """
+            i = otmFactor_start
+            max_iterations = 20  # Prevent infinite loops
+            iterations = 0
+            
+            direction = -1 if entry_price < 100 else 1
+            
+            while iterations < max_iterations:
+                try:
+                    if symbolType == "CALL":
+                        symbol = self.getCallSym(self.timeData, baseSym, IndexPrice, expiry=Currentexpiry, otmFactor=i)
+
+                    else:  # PUT
+                        symbol = self.getPutSym(self.timeData, baseSym, IndexPrice, expiry=Currentexpiry, otmFactor=i)
+                    
+                    data = self.fetchAndCacheFnoHistData(symbol, lastIndexTimeData[1])
+                    
+                    if 100 <= data["c"] <= 300:
+                        return symbol, data["c"]
+                    
+                    i += direction
+                    iterations += 1
+                    
+                except Exception as e:
+                    self.strategyLogger.info(f"Error fetching {symbolType} data: {e}")
+                    i += direction
+                    iterations += 1
+            
+            self.strategyLogger.info(f"No valid {symbolType} symbol found in {max_iterations} iterations")
+            return None, None
+
     # Define a method to execute the algorithm
     def run(self, startDate, endDate, baseSym, indexSym):
+
 
         # Add necessary columns to the DataFrame
         col = ["Target", "Stoploss", "Expiry"]
@@ -79,6 +125,10 @@ class algoLogic(optOverNightAlgoLogic):
         PE_Ls = 1
         CE_Ls = 1
         MaxLoss_Hit = False
+        New_Call_Entry = False
+        New_Put_Entry = False
+        callSym = None
+        putSym = None
 
         otmfactor = -1
 
@@ -135,6 +185,9 @@ class algoLogic(optOverNightAlgoLogic):
                 expiryEpoch= expiryDatetime.timestamp()
                 df_CE = None  # Reset for next day
                 df_PE = None  # Reset for next day
+                callSym = None
+                putSym = None
+
 
                 if PE_Target and CE_Target:
                     PE_Ls=1
@@ -176,8 +229,9 @@ class algoLogic(optOverNightAlgoLogic):
                 # Fetch Call DataFrame separately
                 if df_CE is None:
                     try:
-                        callSym = self.getCallSym(
-                            self.timeData, baseSym, df.at[lastIndexTimeData[1], "c"],expiry= Currentexpiry, otmFactor=otmfactor)
+                        if callSym is None:
+                            callSym = self.getCallSym(
+                                self.timeData, baseSym, df.at[lastIndexTimeData[1], "c"],expiry= Currentexpiry, otmFactor=otmfactor)
                         
                         df_CE = getFnoBacktestData(callSym, open_epoch, open_epoch + 86400, "1Min")
                         df_CE['High'] = df_CE['h'].cummax()
@@ -185,16 +239,20 @@ class algoLogic(optOverNightAlgoLogic):
                         df_CE['range'] = df_CE['High'] - df_CE['Low']
                         df_CE['HRSO'] = ((df_CE['c'] - df_CE['Low']) / df_CE['range'])*100
                         self.strategyLogger.info(f"{self.humanTime} {callSym} df_CE loaded successfully")
+                        self.strategyLogger.info(f"{self.humanTime} {callSym} df_CE:\n{df_CE.head(350).to_string()}")
+
                         
                     except Exception as e:
                         self.strategyLogger.info(f"Failed to fetch CE data at {self.humanTime} {callSym}: {e}")
                         df_CE = None
+                        callSym = None
                 
                 # Fetch Put DataFrame separately
                 if df_PE is None:
                     try:
-                        putSym = self.getPutSym(
-                            self.timeData, baseSym, df.at[lastIndexTimeData[1], "c"],expiry= Currentexpiry, otmFactor=otmfactor)
+                        if putSym is None:
+                            putSym = self.getPutSym(
+                                self.timeData, baseSym, df.at[lastIndexTimeData[1], "c"],expiry= Currentexpiry, otmFactor=otmfactor)
                         
                         df_PE = getFnoBacktestData(putSym, open_epoch, open_epoch + 86400, "1Min")
                         df_PE['High'] = df_PE['h'].cummax()
@@ -202,10 +260,12 @@ class algoLogic(optOverNightAlgoLogic):
                         df_PE['range'] = df_PE['High'] - df_PE['Low']
                         df_PE['HRSO'] = ((df_PE['c'] - df_PE['Low']) / df_PE['range'])*100
                         self.strategyLogger.info(f"{self.humanTime} {putSym} df_PE loaded successfully")
+                        self.strategyLogger.info(f"{self.humanTime} {putSym} df_PE:\n{df_PE.head(350).to_string()}")
                         
                     except Exception as e:
                         self.strategyLogger.info(f"Failed to fetch PE data at {self.humanTime} {putSym}: {e}")
                         df_PE = None
+                        putSym = None
 
                 
                 # pe_prev_day_high = df_1d_PE['h'].max()
@@ -373,22 +433,58 @@ class algoLogic(optOverNightAlgoLogic):
                     if (lastIndexTimeData[1] in df_CE.index) and callCounter < 1:
                         if df_CE.at[lastIndexTimeData[1], "HRSO"] < CE_Low and CE_Target == False:
 
-                            entry_price = df_CE.at[lastIndexTimeData[1], "c"]
-                            target = 0.2 * entry_price
-                            stoploss = 1.5 * entry_price
+                            CE_entry_price = df_CE.at[lastIndexTimeData[1], "c"]
 
-                            self.entryOrder(entry_price, callSym, lotSize*CE_Ls, "SELL", {"Expiry": expiryEpoch,"Target": target,"stoploss":stoploss},)
+                            if 100<=CE_entry_price<=300:
+                                target = 0.2 * CE_entry_price
+                                stoploss = 1.5 * CE_entry_price
+
+                                self.entryOrder(CE_entry_price, callSym, lotSize*CE_Ls, "SELL", {"Expiry": expiryEpoch,"Target": target,"stoploss":stoploss},)
+                            else:
+                                New_Call_Entry = True
 
                 if df_PE is not None:
                     if (lastIndexTimeData[1] in df_PE.index) and putCounter < 1:
                         if df_PE.at[lastIndexTimeData[1], "HRSO"] < PE_Low and PE_Target == False:
                         
-                            entry_price = df_PE.at[lastIndexTimeData[1], "c"]
-                            target = 0.2 * entry_price
-                            stoploss = 1.5 * entry_price
+                            PE_entry_price = df_PE.at[lastIndexTimeData[1], "c"]
+                            if 100<=PE_entry_price<=300:
+                                target = 0.2 * PE_entry_price
+                                stoploss = 1.5 * PE_entry_price
 
-                            self.entryOrder(entry_price, putSym, lotSize*PE_Ls, "SELL", {"Expiry": expiryEpoch,"Target": target,"stoploss":stoploss},)
+                                self.entryOrder(PE_entry_price, putSym, lotSize*PE_Ls, "SELL", {"Expiry": expiryEpoch,"Target": target,"stoploss":stoploss},)
+                            
+                            else:
+                                New_Put_Entry = True
 
+
+                if New_Call_Entry:
+                    callSym, entry_price = self.findValidOptionSymbol(
+                        "CALL", df.at[lastIndexTimeData[1], "c"], CE_entry_price, baseSym, lastIndexTimeData, Currentexpiry, -1
+                    )
+                    
+                    if callSym and entry_price:
+                        target = 0.2 * entry_price
+                        stoploss = 1.5 * entry_price
+                        self.entryOrder(entry_price, callSym, lotSize*CE_Ls, "SELL", 
+                                    {"Expiry": expiryEpoch, "Target": target, "stoploss": stoploss})
+                        
+                        New_Call_Entry = False
+                        df_CE = None  # Reset CE DataFrame to fetch new symbol data in next iteration
+
+                if New_Put_Entry:
+                    putSym, entry_price = self.findValidOptionSymbol(
+                        "PUT", df.at[lastIndexTimeData[1], "c"], PE_entry_price, baseSym, lastIndexTimeData, Currentexpiry, -1
+                    )
+                    
+                    if putSym and entry_price:
+                        target = 0.2 * entry_price
+                        stoploss = 1.5 * entry_price
+                        self.entryOrder(entry_price, putSym, lotSize*PE_Ls, "SELL", 
+                                    {"Expiry": expiryEpoch, "Target": target, "stoploss": stoploss})
+                    
+                        New_Put_Entry = False
+                        df_PE = None  # Reset PE DataFrame to fetch new symbol data in next iteration
 
 
 
@@ -408,7 +504,7 @@ if __name__ == "__main__":
     version = "v1"
 
     # Define Start date and End date
-    startDate = datetime(2025, 1, 1, 9, 15)
+    startDate = datetime(2023, 1, 1, 9, 15)
     endDate = datetime(2025, 12, 31, 15, 30)
 
     # Create algoLogic object

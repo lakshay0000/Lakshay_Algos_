@@ -57,7 +57,7 @@ class algoLogic(optOverNightAlgoLogic):
 
         lastIndexTimeData = [0, 0]
 
-        Currentexpiry = getExpiryData(startEpoch, baseSym)['CurrentExpiry']
+        Currentexpiry = getExpiryData(startEpoch, baseSym)['MonthlyExpiry']
         expiryDatetime = datetime.strptime(Currentexpiry, "%d%b%y").replace(hour=15, minute=20)
         expiryEpoch= expiryDatetime.timestamp()
         lotSize = int(getExpiryData(self.timeData, baseSym)["LotSize"])
@@ -94,8 +94,8 @@ class algoLogic(optOverNightAlgoLogic):
             print(self.humanTime)
 
             # # Skip the dates 2nd March 2024 and 18th May 2024
-            # if self.humanTime.date() == datetime(2025, 4, 7).date() or self.humanTime.date() == datetime(2025, 6, 16).date():
-            #     continue
+            if self.humanTime.date() == datetime(2024, 1, 5).date():
+                continue
 
             # Skip time periods outside trading hours
             if (self.humanTime.time() < time(9, 16)) | (self.humanTime.time() > time(15, 30)):
@@ -130,7 +130,7 @@ class algoLogic(optOverNightAlgoLogic):
             
 
             if self.humanTime.date() > expiryDatetime.date():
-                Currentexpiry = getExpiryData(self.timeData, baseSym)['CurrentExpiry']
+                Currentexpiry = getExpiryData(self.timeData, baseSym)['MonthlyExpiry']
                 expiryDatetime = datetime.strptime(Currentexpiry, "%d%b%y").replace(hour=15, minute=20)
                 expiryEpoch= expiryDatetime.timestamp()
                 df_CE = None  # Reset for next day
@@ -408,15 +408,15 @@ if __name__ == "__main__":
     version = "v1"
 
     # Define Start date and End date
-    startDate = datetime(2025, 1, 1, 9, 15)
+    startDate = datetime(2023, 1, 1, 9, 15)
     endDate = datetime(2025, 12, 31, 15, 30)
 
     # Create algoLogic object
     algo = algoLogic(devName, strategyName, version)
 
     # Define Index Name
-    baseSym = "NIFTY"
-    indexName = "NIFTY 50"
+    baseSym = "BANKNIFTY"
+    indexName = "NIFTY BANK"
 
     # Execute the algorithm
     closedPnl, fileDir = algo.run(startDate, endDate, baseSym, indexName)
