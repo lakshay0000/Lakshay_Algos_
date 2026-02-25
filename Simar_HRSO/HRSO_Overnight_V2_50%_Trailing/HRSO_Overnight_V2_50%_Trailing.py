@@ -294,7 +294,14 @@ class algoLogic(optOverNightAlgoLogic):
 
 
 
-                    elif symSide == 'CE': 
+                    elif symSide == 'CE':
+                        if row["CurrentPrice"] <= row["Trailing_Target"]:
+                            self.openPnl.at[index, "stoploss"] = row["CurrentPrice"]*2
+                            self.openPnl.at[index, "Trailing_Target"] = row["CurrentPrice"]
+                            self.strategyLogger.info(f"{self.humanTime} {row['Symbol']} TARGET HIT CE and stoploss shifted to: {self.openPnl.at[index, 'stoploss']}")
+                            self.strategyLogger.info(f"Trailing_Targe: {self.openPnl.at[index, 'Trailing_Target']}")
+                            self.strategyLogger.info(f"{self.openPnl[['Symbol', 'Target', 'stoploss']].to_string()}")
+
                         if row["CurrentPrice"] <= row["Target"]:
                             exitType = "Target Hit"
                             self.exitOrder(index, exitType)
@@ -312,6 +319,12 @@ class algoLogic(optOverNightAlgoLogic):
 
                         
                     elif symSide == 'PE':
+                        if row["CurrentPrice"] <= row["Trailing_Target"]:
+                            self.openPnl.at[index, "stoploss"] = row["CurrentPrice"]*2
+                            self.openPnl.at[index, "Trailing_Target"] = row["CurrentPrice"]
+                            self.strategyLogger.info(f"{self.humanTime} {row['Symbol']} TARGET HIT PE and stoploss shifted to: {self.openPnl.at[index, 'stoploss']}")
+                            self.strategyLogger.info(f"Trailing_Targe: {self.openPnl.at[index, 'Trailing_Target']}")
+                            self.strategyLogger.info(f"{self.openPnl[['Symbol', 'Target', 'stoploss']].to_string()}")
 
                         if row["CurrentPrice"] <= row["Target"]:
                             exitType = "Target Hit"
@@ -346,6 +359,7 @@ class algoLogic(optOverNightAlgoLogic):
                     if lastIndexTimeData[1] not in df_opt.index:
                         continue
                     
+                    state = stock_state[symbol]  
                     # sym = df_opt.at[lastIndexTimeData[1], "Symbol"]
                     symSide = symbol[len(symbol) - 2:]
 
@@ -353,23 +367,25 @@ class algoLogic(optOverNightAlgoLogic):
                     sym_count = tradecount.get(symbol, 0)
 
                 
-                    if symSide=='CE' and sym_count < 1 and callCounter < 2:
+                    if symSide=='CE' and sym_count < 1 and callCounter < 3:
                         if df_opt.at[lastIndexTimeData[1], "HRSO"] < CE_Low and df_opt.at[lastIndexTimeData[1], "rsi"] < 30:
 
                             entry_price = df_opt.at[lastIndexTimeData[1], "c"]
-                            target = 0.3 * entry_price
+                            target = 0.2 * entry_price
+                            Trailing_Target = 0.5 * entry_price
                             stoploss = 1.5 * entry_price
 
-                            self.entryOrder(entry_price, symbol, lotSize, "SELL", {"Expiry": expiryEpoch,"Target": target,"stoploss":stoploss},)
+                            self.entryOrder(entry_price, symbol, lotSize, "SELL", {"Expiry": expiryEpoch,"Target": target,"stoploss":stoploss, "Trailing_Target": Trailing_Target},)
 
-                    if symSide=='PE' and sym_count < 1 and putCounter < 2:
+                    if symSide=='PE' and sym_count < 1 and putCounter < 3:
                         if df_opt.at[lastIndexTimeData[1], "HRSO"] < PE_Low and df_opt.at[lastIndexTimeData[1], "rsi"] < 30:
                         
                             entry_price = df_opt.at[lastIndexTimeData[1], "c"]
-                            target = 0.3 * entry_price
+                            target = 0.2 * entry_price
+                            Trailing_Target = 0.5 * entry_price
                             stoploss = 1.5 * entry_price
 
-                            self.entryOrder(entry_price, symbol, lotSize, "SELL", {"Expiry": expiryEpoch,"Target": target,"stoploss":stoploss},)
+                            self.entryOrder(entry_price, symbol, lotSize, "SELL", {"Expiry": expiryEpoch,"Target": target,"stoploss":stoploss, "Trailing_Target": Trailing_Target},)
 
 
 

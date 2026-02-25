@@ -85,7 +85,7 @@ class algoLogic(optOverNightAlgoLogic):
             datetime(2025, 2, 1).date(),
         ]       
 
-        otmfactor = -1
+        otmfactor = 0
 
 
         
@@ -155,7 +155,7 @@ class algoLogic(optOverNightAlgoLogic):
                 self.strategyLogger.info(f"{self.humanTime} otmFactor={otmfactor}")
 
 
-            if self.humanTime.time() >= time(10, 1) and self.humanTime.time() < time(15, 20):
+            if self.humanTime.time() >= time(9, 21) and self.humanTime.time() < time(15, 20):
                 # if self.humanTime.time() == time(9, 17):
                 #     open_epoch = lastIndexTimeData[1]
                 #     self.strategyLogger.info(f"{self.humanTime} otmFactor=0")
@@ -166,7 +166,7 @@ class algoLogic(optOverNightAlgoLogic):
                         callSym = self.getCallSym(
                             self.timeData, baseSym, df.at[lastIndexTimeData[1], "c"],expiry= Currentexpiry, otmFactor=otmfactor)
                         
-                        df_CE = getFnoBacktestData(callSym, open_epoch - 86400, open_epoch + 86400, "1Min")
+                        df_CE = getFnoBacktestData(callSym, open_epoch - (86400*5), open_epoch + 86400, "1Min")
                         # Calculate RSI indicator
                         df_CE["rsi"] = ta.RSI(df_CE["c"], timeperiod=7)
                         df_CE.dropna(inplace=True)
@@ -190,7 +190,7 @@ class algoLogic(optOverNightAlgoLogic):
                         putSym = self.getPutSym(
                             self.timeData, baseSym, df.at[lastIndexTimeData[1], "c"],expiry= Currentexpiry, otmFactor=otmfactor)
                         
-                        df_PE = getFnoBacktestData(putSym, open_epoch - 86400, open_epoch + 86400, "1Min")
+                        df_PE = getFnoBacktestData(putSym, open_epoch - (86400*5), open_epoch + 86400, "1Min")
                         # Calculate RSI indicator
                         df_PE["rsi"] = ta.RSI(df_PE["c"], timeperiod=7)
                         df_PE.dropna(inplace=True)
@@ -328,7 +328,7 @@ class algoLogic(optOverNightAlgoLogic):
 
 
             # Check for entry signals and execute orders
-            if ((timeData-60) in df.index) and self.humanTime.time() < time(15, 20) and self.humanTime.time() > time(10, 0):
+            if ((timeData-60) in df.index) and self.humanTime.time() < time(15, 20) and self.humanTime.time() > time(9, 20):
                 
                 if df_CE is not None:
                     if (lastIndexTimeData[1] in df_CE.index) and callCounter < 1:

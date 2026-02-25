@@ -22,11 +22,9 @@ class algoLogic(optOverNightAlgoLogic):
             for i in range(-10,10):
                 callSymotm = self.getCallSym(self.timeData, baseSym, IndexPrice, expiry=expiry, otmFactor=i)         
                 try:
-                    data = self.fetchAndCacheFnoHistData(
-                        callSymotm, date)
+                    data = self.fetchAndCacheFnoHistData(callSymotm, date)
                     prmtb.append(data["c"])
                     strike.append(callSymotm)
-
                 except Exception as e:
                     self.strategyLogger.info(e)    
 
@@ -34,8 +32,7 @@ class algoLogic(optOverNightAlgoLogic):
             for i in range(-10,10):
                 putSymotm = self.getPutSym(self.timeData, baseSym, IndexPrice, expiry=expiry, otmFactor=i)
                 try:
-                    data = self.fetchAndCacheFnoHistData(
-                        putSymotm, date)
+                    data = self.fetchAndCacheFnoHistData(putSymotm, date)
                     prmtb.append(data["c"])
                     strike.append(putSymotm)
                 except Exception as e:
