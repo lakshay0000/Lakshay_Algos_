@@ -353,7 +353,7 @@ class algoLogic(optOverNightAlgoLogic):
                     sym_count = tradecount.get(symbol, 0)
 
                 
-                    if symSide=='CE' and sym_count < 1 and callCounter < 2:
+                    if symSide=='CE' and sym_count < 1 and callCounter < 3:
                         if df_opt.at[lastIndexTimeData[1], "HRSO"] < CE_Low and df_opt.at[lastIndexTimeData[1], "rsi"] < 30:
 
                             entry_price = df_opt.at[lastIndexTimeData[1], "c"]
@@ -362,7 +362,7 @@ class algoLogic(optOverNightAlgoLogic):
 
                             self.entryOrder(entry_price, symbol, lotSize, "SELL", {"Expiry": expiryEpoch,"Target": target,"stoploss":stoploss},)
 
-                    if symSide=='PE' and sym_count < 1 and putCounter < 2:
+                    if symSide=='PE' and sym_count < 1 and putCounter < 3:
                         if df_opt.at[lastIndexTimeData[1], "HRSO"] < PE_Low and df_opt.at[lastIndexTimeData[1], "rsi"] < 30:
                         
                             entry_price = df_opt.at[lastIndexTimeData[1], "c"]

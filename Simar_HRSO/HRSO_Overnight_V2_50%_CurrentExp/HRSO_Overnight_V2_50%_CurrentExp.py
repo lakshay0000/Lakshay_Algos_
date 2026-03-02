@@ -79,6 +79,7 @@ class algoLogic(optOverNightAlgoLogic):
         stock_state = {}
 
         otmfactor = 0
+        Expiry_Hit = False
 
 
         
@@ -126,12 +127,15 @@ class algoLogic(optOverNightAlgoLogic):
             self.pnlCalculator()
             
 
-            if self.humanTime.date() == expiryDatetime.date():
-                Currentexpiry = getExpiryData(self.timeData, baseSym)['NextExpiry']
+            if self.humanTime.date() > expiryDatetime.date():
+                Currentexpiry = getExpiryData(self.timeData, baseSym)['CurrentExpiry']
                 expiryDatetime = datetime.strptime(Currentexpiry, "%d%b%y").replace(hour=15, minute=20)
                 expiryEpoch= expiryDatetime.timestamp()
                 df_CE = None  # Reset for next day
                 df_PE = None  # Reset for next day
+                Symbol_1min_data = {}
+                stock_state = {}
+                Expiry_Hit = False
                 
 
             # if self.humanTime.date() < (expiryDatetime).date():
@@ -291,6 +295,7 @@ class algoLogic(optOverNightAlgoLogic):
                         Expiry_Hit = True
                         Symbol_1min_data.pop(row["Symbol"], None)
                         stock_state.pop(row["Symbol"], None)
+                        Expiry_Hit = True
 
 
 
@@ -354,7 +359,7 @@ class algoLogic(optOverNightAlgoLogic):
 
 
             # Check for entry signals and execute orders
-            if ((timeData-60) in df.index) and Symbol_1min_data:
+            if ((timeData-60) in df.index) and Symbol_1min_data and Expiry_Hit == False:
 
                 for symbol, df_opt in Symbol_1min_data.items():
 
