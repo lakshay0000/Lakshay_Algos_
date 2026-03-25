@@ -187,7 +187,7 @@ class algoLogic(optOverNightAlgoLogic):
                             self.exitOrder(index, exitType)
                         
                         elif (timeData-900) in df_15min.index:
-                            if UnderlyingPrice < row["Stoploss"]:
+                            if UnderlyingPrice <= row["Stoploss"]:
                                 exitType = "ISL"
                                 self.exitOrder(index, exitType)
 
@@ -202,7 +202,7 @@ class algoLogic(optOverNightAlgoLogic):
                             self.exitOrder(index, exitType)
 
                         elif (timeData-900) in df_15min.index:
-                            if UnderlyingPrice < row["Stoploss"]:
+                            if UnderlyingPrice >= row["Stoploss"]:
                                 exitType = "ISL"
                                 self.exitOrder(index, exitType)
 

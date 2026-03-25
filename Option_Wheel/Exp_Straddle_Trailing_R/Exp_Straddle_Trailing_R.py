@@ -13,7 +13,7 @@ from backtestTools.histData import getFnoBacktestData
 # Define a class algoLogic that inherits from optOverNightAlgoLogic
 class algoLogic(optOverNightAlgoLogic):
 
-    def straddle(self, date, IndexPrice, baseSym):     
+    def straddle(self, date, IndexPrice, baseSym):
         Factor = [0, 1, -1, 2, -2]
         minlist = []
         callSymList = []
@@ -57,47 +57,11 @@ class algoLogic(optOverNightAlgoLogic):
             return None  # Return None if no valid pairs found
         
 
-    def OptChain(self, date, symbol, IndexPrice, baseSym, Strangle_data):
-        prmtb=[]
-        strike=[]
-        if (symbol== "CE"):
-            for i in range(0,8):
-                callSymotm = self.getCallSym(date, baseSym, IndexPrice, otmFactor=i)         
-                try:
-                    data = self.fetchAndCacheFnoHistData(
-                        callSymotm, date)
-                    prmtb.append(data["c"])
-                    strike.append(callSymotm)
-                except Exception as e:
-                    self.strategyLogger.info(e)
-                   
-
-        if (symbol== "PE"):
-            for i in range(0,8):
-                putSymotm = self.getPutSym(date, baseSym, IndexPrice, otmFactor=i)
-                try:
-                    data = self.fetchAndCacheFnoHistData(
-                        putSymotm, date)
-                    prmtb.append(data["c"])
-                    strike.append(putSymotm)
-                except Exception as e:
-                    self.strategyLogger.info(e)
-
-        nearest_premium = min(prmtb, key=lambda x: abs(x - Strangle_data))
-        premium_index = prmtb.index(nearest_premium)
-        Sym = strike[premium_index]  
-
-        self.strategyLogger.info(f"Premium List: {prmtb} selected premium: {nearest_premium} at OTM: {premium_index}")
-        self.strategyLogger.info(f"Strike List: {strike} selected Strike: {Sym}")
-
-        return Sym, nearest_premium
-        
-
     # Define a method to execute the algorithm
     def run(self, startDate, endDate, baseSym, indexSym):
 
         # Add necessary columns to the DataFrame
-        col = ["Target", "stoploss", "Expiry", "Trailing_Target", "Trailing_Flag", "Straddle_Num"]  # Add "Trailing_Flag" if needed
+        col = ["Target", "Stoploss", "Expiry"]
         self.addColumnsToOpenPnlDf(col)
 
         # Convert start and end dates to timestamps
@@ -130,7 +94,6 @@ class algoLogic(optOverNightAlgoLogic):
         lotSize = int(getExpiryData(self.timeData, baseSym)["LotSize"])
 
         StraddleEntryAllowed = True
-        Straddle_Num = 0
 
 
 
@@ -184,7 +147,6 @@ class algoLogic(optOverNightAlgoLogic):
                 expiryDatetime = datetime.strptime(Currentexpiry, "%d%b%y").replace(hour=15, minute=20)
                 expiryEpoch= expiryDatetime.timestamp()
                 StraddleEntryAllowed = True
-                Straddle_Num = 0
 
 
             
@@ -209,7 +171,7 @@ class algoLogic(optOverNightAlgoLogic):
 
                     symSide = row["Symbol"]
                     symSide = symSide[len(symSide) - 2:]  
-                    
+                    symstrike = row["Symbol"]
                     # self.strategyLogger.info(f"{self.openPnl[['Symbol', 'Target', 'stoploss']].to_string()}")
 
                     if row["CurrentPrice"] <= row["Trailing_Target"]:
@@ -224,64 +186,28 @@ class algoLogic(optOverNightAlgoLogic):
                     if self.humanTime.time() >= time(15, 20):
                         exitType = "Time Up"
                         self.exitOrder(index, exitType)
-                        self.strategyLogger.info(f"{self.humanTime} Straddle_Num: {Straddle_Num} Time Up.")
 
                     elif row["CurrentPrice"] >= row["stoploss"]:
                         exitType = "Stoploss Hit"
-                        # strike = row["Symbol"][12:-2]  
+                        # strike = row["Symbol"][12:-2]
                         self.exitOrder(index, exitType)
                         
-                        # if row["Trailing_Flag"] == False:
+                        if row["Trailing_Flag"] == False:
+                            StraddleEntryAllowed = True
+                        else:
+                            self.strategyLogger.info(f"{self.humanTime} {row['Symbol']} STOPLOSS HIT and Trailing Flag is True, so StraddleEntryAllowed remains False")
+
+                        # tradecount = self.openPnl['Symbol'].str[12:-2].value_counts()
+                        # sym_count = tradecount.get(strike, 0)
+                        # if sym_count == 1:
                         #     StraddleEntryAllowed = True
-                        # else:
-                        #     self.strategyLogger.info(f"{self.humanTime} {row['Symbol']} STOPLOSS HIT and Trailing Flag is True, so StraddleEntryAllowed remains False")
-                        if row["Straddle_Num"] > 0:
-                            Entry = row["Straddle_Num"]
-                            tradecount = self.openPnl['Straddle_Num'].value_counts()
-                            Entry_count = tradecount.get(Entry, 0)
-
-                            if Entry_count > 0:
-                                StraddleEntryAllowed = True
-
-                            # small Premium entry after stoploss hit
-                            if row["Trailing_Flag"] == False:
-                                SL_price= row["CurrentPrice"]-row["EntryPrice"]
-                            else:
-                                SL_price= row["CurrentPrice"]-row["Trailing_Target"] 
-
-                            if SL_price > row["EntryPrice"] * 0.5:
-                                SL_price = row["EntryPrice"] * 0.5
-
-                            if symSide == "CE":
-                                callSym, Data_CE = self.OptChain(lastIndexTimeData[1], "CE", df.at[lastIndexTimeData[1], "c"], baseSym, SL_price)
-
-                                stoploss = 2 * Data_CE
-
-                                self.entryOrder(Data_CE, callSym, lotSize, "SELL", {"Expiry": expiryEpoch, "stoploss": stoploss},)
-
-                            elif symSide == "PE":
-                                putSym, Data_PE = self.OptChain(lastIndexTimeData[1], "PE", df.at[lastIndexTimeData[1], "c"], baseSym, SL_price)
-
-                                stoploss = 2 * Data_PE
-
-                                self.entryOrder(Data_PE, putSym, lotSize, "SELL", {"Expiry": expiryEpoch, "stoploss": stoploss},)
-
-                                  
 
                     elif row["CurrentPrice"] <= row["Target"]:
                         exitType = "Target Hit"
                         self.exitOrder(index, exitType)
 
-
-            callCounter= self.openPnl['Symbol'].str[-2:].value_counts().get('CE',0)
-            putCounter= self.openPnl['Symbol'].str[-2:].value_counts().get('PE',0)
-
-
-            if callCounter == 3 or putCounter == 3:
-                self.strategyLogger.info(f"{self.humanTime} 3 CE or PE positions are open. Current CE count: {callCounter}, Current PE count: {putCounter}")
-                StraddleEntryAllowed = False
-
-            
+                        
+                        
 
             # Check for entry signals and execute orders
             if ((timeData-60) in df.index):
@@ -289,7 +215,6 @@ class algoLogic(optOverNightAlgoLogic):
                 if self.humanTime.date() == expiryDatetime.date() and self.humanTime.time() < time(15, 20):
 
                     if StraddleEntryAllowed:
-                        Straddle_Num += 1
 
                         callSym, putSym = self.straddle(lastIndexTimeData[1], df.at[lastIndexTimeData[1], "c"], baseSym)
                     
@@ -304,7 +229,7 @@ class algoLogic(optOverNightAlgoLogic):
                         target = 0.1 * data["c"]
                         trailingTarget = 0.5 * data["c"]
 
-                        self.entryOrder(data["c"], callSym, lotSize, "SELL", {"Expiry": expiryEpoch, "stoploss": stoploss, "Target": target, "Trailing_Target": trailingTarget, "Trailing_Flag": False, "Straddle_Num": Straddle_Num},)
+                        self.entryOrder(data["c"], callSym, lotSize, "SELL", {"Expiry": expiryEpoch, "stoploss": stoploss, "Target": target, "Trailing_Target": trailingTarget, "Trailing_Flag": False},)
                         
                         # PE Leg
                         try:
@@ -318,7 +243,7 @@ class algoLogic(optOverNightAlgoLogic):
                         trailingTarget = 0.5 * data["c"]
 
                         
-                        self.entryOrder(data["c"], putSym, lotSize, "SELL", {"Expiry": expiryEpoch, "stoploss": stoploss, "Target": target, "Trailing_Target": trailingTarget, "Trailing_Flag": False, "Straddle_Num": Straddle_Num},)
+                        self.entryOrder(data["c"], putSym, lotSize, "SELL", {"Expiry": expiryEpoch, "stoploss": stoploss, "Target": target, "Trailing_Target": trailingTarget, "Trailing_Flag": False},)
 
                         StraddleEntryAllowed = False
 
@@ -340,7 +265,7 @@ if __name__ == "__main__":
     version = "v1"
 
     # Define Start date and End date
-    startDate = datetime(2023, 1, 1, 9, 15)
+    startDate = datetime(2025, 1, 1, 9, 15)
     endDate = datetime(2025, 12, 31, 15, 30)
 
     # Create algoLogic object

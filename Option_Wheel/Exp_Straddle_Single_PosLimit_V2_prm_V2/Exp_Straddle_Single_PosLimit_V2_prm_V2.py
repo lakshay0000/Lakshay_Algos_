@@ -252,6 +252,8 @@ class algoLogic(optOverNightAlgoLogic):
                             if SL_price > row["EntryPrice"] * 0.5:
                                 SL_price = row["EntryPrice"] * 0.5
 
+                            self.strategyLogger.info(f"{self.humanTime} Premium_price for new entry is {SL_price}")
+
                             if symSide == "CE":
                                 callSym, Data_CE = self.OptChain(lastIndexTimeData[1], "CE", df.at[lastIndexTimeData[1], "c"], baseSym, SL_price)
 

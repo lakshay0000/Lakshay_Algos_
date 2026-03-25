@@ -97,7 +97,7 @@ class algoLogic(optOverNightAlgoLogic):
     def run(self, startDate, endDate, baseSym, indexSym):
 
         # Add necessary columns to the DataFrame
-        col = ["Target", "stoploss", "Expiry", "Trailing_Target", "Trailing_Flag", "Straddle_Num"]  # Add "Trailing_Flag" if needed
+        col = ["Target", "stoploss", "Expiry", "Trailing_Target", "Straddle_Num"]  # Add "Trailing_Flag" if needed
         self.addColumnsToOpenPnlDf(col)
 
         # Convert start and end dates to timestamps
@@ -215,7 +215,6 @@ class algoLogic(optOverNightAlgoLogic):
                     if row["CurrentPrice"] <= row["Trailing_Target"]:
                         self.openPnl.at[index, "stoploss"] = row["CurrentPrice"]*2
                         self.openPnl.at[index, "Trailing_Target"] = row["CurrentPrice"]
-                        self.openPnl.at[index, "Trailing_Flag"] = True
                         self.strategyLogger.info(f"{self.humanTime} {row['Symbol']} Trailing_Target HIT CE and stoploss shifted to: {self.openPnl.at[index, 'stoploss']}")
                         self.strategyLogger.info(f"Trailing_Target: {self.openPnl.at[index, 'Trailing_Target']}")
                         self.strategyLogger.info(f"{self.openPnl[['Symbol', 'Target', 'stoploss']].to_string()}")
@@ -239,32 +238,23 @@ class algoLogic(optOverNightAlgoLogic):
                             Entry = row["Straddle_Num"]
                             tradecount = self.openPnl['Straddle_Num'].value_counts()
                             Entry_count = tradecount.get(Entry, 0)
-
+                            SL_price= row["EntryPrice"] * 0.3  
                             if Entry_count > 0:
                                 StraddleEntryAllowed = True
 
-                            # small Premium entry after stoploss hit
-                            if row["Trailing_Flag"] == False:
-                                SL_price= row["CurrentPrice"]-row["EntryPrice"]
-                            else:
-                                SL_price= row["CurrentPrice"]-row["Trailing_Target"] 
+                                if symSide == "CE":
+                                    callSym, Data_CE = self.OptChain(lastIndexTimeData[1], "CE", df.at[lastIndexTimeData[1], "c"], baseSym, SL_price)
 
-                            if SL_price > row["EntryPrice"] * 0.5:
-                                SL_price = row["EntryPrice"] * 0.5
+                                    stoploss = 2 * Data_CE
 
-                            if symSide == "CE":
-                                callSym, Data_CE = self.OptChain(lastIndexTimeData[1], "CE", df.at[lastIndexTimeData[1], "c"], baseSym, SL_price)
+                                    self.entryOrder(Data_CE, callSym, lotSize, "SELL", {"Expiry": expiryEpoch, "stoploss": stoploss},)
 
-                                stoploss = 2 * Data_CE
+                                elif symSide == "PE":
+                                    putSym, Data_PE = self.OptChain(lastIndexTimeData[1], "PE", df.at[lastIndexTimeData[1], "c"], baseSym, SL_price)
 
-                                self.entryOrder(Data_CE, callSym, lotSize, "SELL", {"Expiry": expiryEpoch, "stoploss": stoploss},)
+                                    stoploss = 2 * Data_PE
 
-                            elif symSide == "PE":
-                                putSym, Data_PE = self.OptChain(lastIndexTimeData[1], "PE", df.at[lastIndexTimeData[1], "c"], baseSym, SL_price)
-
-                                stoploss = 2 * Data_PE
-
-                                self.entryOrder(Data_PE, putSym, lotSize, "SELL", {"Expiry": expiryEpoch, "stoploss": stoploss},)
+                                    self.entryOrder(Data_PE, putSym, lotSize, "SELL", {"Expiry": expiryEpoch, "stoploss": stoploss},)
 
                                   
 
@@ -304,7 +294,7 @@ class algoLogic(optOverNightAlgoLogic):
                         target = 0.1 * data["c"]
                         trailingTarget = 0.5 * data["c"]
 
-                        self.entryOrder(data["c"], callSym, lotSize, "SELL", {"Expiry": expiryEpoch, "stoploss": stoploss, "Target": target, "Trailing_Target": trailingTarget, "Trailing_Flag": False, "Straddle_Num": Straddle_Num},)
+                        self.entryOrder(data["c"], callSym, lotSize, "SELL", {"Expiry": expiryEpoch, "stoploss": stoploss, "Target": target, "Trailing_Target": trailingTarget, "Straddle_Num": Straddle_Num},)
                         
                         # PE Leg
                         try:
@@ -318,7 +308,7 @@ class algoLogic(optOverNightAlgoLogic):
                         trailingTarget = 0.5 * data["c"]
 
                         
-                        self.entryOrder(data["c"], putSym, lotSize, "SELL", {"Expiry": expiryEpoch, "stoploss": stoploss, "Target": target, "Trailing_Target": trailingTarget, "Trailing_Flag": False, "Straddle_Num": Straddle_Num},)
+                        self.entryOrder(data["c"], putSym, lotSize, "SELL", {"Expiry": expiryEpoch, "stoploss": stoploss, "Target": target, "Trailing_Target": trailingTarget, "Straddle_Num": Straddle_Num},)
 
                         StraddleEntryAllowed = False
 
