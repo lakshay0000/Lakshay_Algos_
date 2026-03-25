@@ -371,10 +371,9 @@ class algoLogic(optOverNightAlgoLogic):
                             putSym, lastIndexTimeData[1])
                     except Exception as e:
                         self.strategyLogger.info(e)
-                    
-                    if data_CE["c"] is None or data_PE["c"] is None:
-                        self.strategyLogger.info(f"One or both options have None premium at {self.humanTime}")  
+                        self.strategyLogger.info(f"Error fetching data for {callSym} or {putSym} at {self.humanTime}. Skipping entry.")
                         continue
+                    
 
                     StraddlePremium = data_CE["c"] + data_PE["c"]
                     self.strategyLogger.info(f"Straddle Premium at {self.humanTime} is {StraddlePremium}")
