@@ -242,16 +242,16 @@ class algoLogic(optOverNightAlgoLogic):
                     data_CE = self.fetchAndCacheFnoHistData(callSym, lastIndexTimeData[1])
                     data_PE = self.fetchAndCacheFnoHistData(putSym, lastIndexTimeData[1])
                     
-                    StraddlePremium = data_CE["c"] + data_PE["c"]
-                    self.strategyLogger.info(f"Straddle Premium at {self.humanTime} is {StraddlePremium}")
+                    StraddlePremium_Cr = data_CE["c"] + data_PE["c"]
+                    self.strategyLogger.info(f"Straddle Premium at {self.humanTime} is {StraddlePremium_Cr}")
 
                     if self.humanTime.time() == time(9, 16):
-                        refrence_value = StraddlePremium
+                        refrence_value = StraddlePremium_Cr
                     
                     # APPEND TO STORAGE
                     straddle_data.append({
                         'timestamp': self.humanTime,
-                        'premium': StraddlePremium
+                        'premium': StraddlePremium_Cr
                     })
                     
                     # CALCULATE EMA 10 once we have enough data points
@@ -350,82 +350,161 @@ class algoLogic(optOverNightAlgoLogic):
             if ((timeData-60) in df.index):
 
                 if self.openPnl.empty and self.humanTime.date() != expiryDatetime.date() and self.humanTime.time() >= time(9, 20) and self.humanTime.time() < time(15, 20):
-                    if current_ema is None or current_ema < refrence_value:
-                        #Straddle Price Calculation
-                        callSym = self.getCallSym(
-                            self.timeData, baseSym, df.at[lastIndexTimeData[1], "c"],expiry= Currentexpiry)
-                        putSym = self.getPutSym(
-                            self.timeData, baseSym, df.at[lastIndexTimeData[1], "c"],expiry= Currentexpiry)
+                    if self.humanTime.time() >= time(9, 25):
+                        if current_ema is None or current_ema < refrence_value:
+                            #Straddle Price Calculation
+                            callSym = self.getCallSym(
+                                self.timeData, baseSym, df.at[lastIndexTimeData[1], "c"],expiry= Currentexpiry)
+                            putSym = self.getPutSym(
+                                self.timeData, baseSym, df.at[lastIndexTimeData[1], "c"],expiry= Currentexpiry)
 
-                        try:
-                            data_CE = self.fetchAndCacheFnoHistData(
-                                callSym, lastIndexTimeData[1])
-                            data_PE = self.fetchAndCacheFnoHistData(
-                                putSym, lastIndexTimeData[1])
-                        except Exception as e:
-                            self.strategyLogger.info(e)
-                            self.strategyLogger.info(f"Error fetching data for {callSym} or {putSym} at {self.humanTime}. Skipping entry.")
-                            continue
-                        
+                            try:
+                                data_CE = self.fetchAndCacheFnoHistData(
+                                    callSym, lastIndexTimeData[1])
+                                data_PE = self.fetchAndCacheFnoHistData(
+                                    putSym, lastIndexTimeData[1])
+                            except Exception as e:
+                                self.strategyLogger.info(e)
+                                self.strategyLogger.info(f"Error fetching data for {callSym} or {putSym} at {self.humanTime}. Skipping entry.")
+                                continue
+                            
 
-                        StraddlePremium = data_CE["c"] + data_PE["c"]
-                        self.strategyLogger.info(f"Straddle Premium at {self.humanTime} is {StraddlePremium}")
-                        
-                        otm = round((StraddlePremium*Perc)/50)
-                        self.strategyLogger.info(f"Calculated OTM factor is {otm} and Perc is {Perc}")
+                            StraddlePremium = data_CE["c"] + data_PE["c"]
+                            self.strategyLogger.info(f"Straddle Premium at {self.humanTime} is {StraddlePremium}")
+                            
+                            otm = round((StraddlePremium*Perc)/50)
+                            self.strategyLogger.info(f"Calculated OTM factor is {otm} and Perc is {Perc}")
 
-                        
-                        #Entry for CE and PE legs with OTM factor
-                        callSym = self.getCallSym(
-                            self.timeData, baseSym, df.at[lastIndexTimeData[1], "c"],expiry= Currentexpiry, otmFactor=otm)
-                        
-                        strike = re.search(r'(\d+)(?=CE|PE)', callSym).group(1)
+                            
+                            #Entry for CE and PE legs with OTM factor
+                            callSym = self.getCallSym(
+                                self.timeData, baseSym, df.at[lastIndexTimeData[1], "c"],expiry= Currentexpiry, otmFactor=otm)
+                            
+                            strike = re.search(r'(\d+)(?=CE|PE)', callSym).group(1)
 
-                        if int(strike) % 100 != 0:
-                            self.strategyLogger.info(f"CE strike {strike} is not a valid strike. Adjusting OTM factor.")
-                            callSym = self.getCallSym(self.timeData, baseSym, df.at[lastIndexTimeData[1], "c"],expiry= Currentexpiry, otmFactor= otm-1)
-
-
-                        try:
-                            data = self.fetchAndCacheFnoHistData(
-                                callSym, lastIndexTimeData[1])
-                        except Exception as e:
-                            self.strategyLogger.info(e)
-
-                        data_CE = data["c"]
+                            if int(strike) % 100 != 0:
+                                self.strategyLogger.info(f"CE strike {strike} is not a valid strike. Adjusting OTM factor.")
+                                callSym = self.getCallSym(self.timeData, baseSym, df.at[lastIndexTimeData[1], "c"],expiry= Currentexpiry, otmFactor= otm-1)
 
 
-                        putSym = self.getPutSym(
-                            self.timeData, baseSym, df.at[lastIndexTimeData[1], "c"],expiry= Currentexpiry, otmFactor=otm)
-                        
-                        strike = re.search(r'(\d+)(?=CE|PE)', putSym).group(1)
+                            try:
+                                data = self.fetchAndCacheFnoHistData(
+                                    callSym, lastIndexTimeData[1])
+                            except Exception as e:
+                                self.strategyLogger.info(e)
 
-                        if int(strike) % 100 != 0:
-                            self.strategyLogger.info(f"PE strike {strike} is not a valid strike. Adjusting OTM factor.")
-                            putSym = self.getPutSym(self.timeData, baseSym, df.at[lastIndexTimeData[1], "c"],expiry= Currentexpiry, otmFactor= otm-1)
-
-                        try:
-                            data = self.fetchAndCacheFnoHistData(
-                                putSym, lastIndexTimeData[1])
-                        except Exception as e:
-                            self.strategyLogger.info(e)
-
-                        data_PE = data["c"]
-
-                        if data_CE > data_PE:
-                            if data_CE-data_PE > data_CE*0.1:
-                                self.strategyLogger.info(f"CE premium {data_CE} is higher than PE premium {data_PE} at {self.humanTime}. Selecting strikes based on premium.")
-                                putSym, data_PE = self.OptChain(lastIndexTimeData[1], "PE", df.at[lastIndexTimeData[1], "c"], baseSym, data_CE, otm)
-                        elif data_PE > data_CE:
-                            if data_PE-data_CE > data_PE*0.1:
-                                self.strategyLogger.info(f"PE premium {data_PE} is higher than CE premium {data_CE} at {self.humanTime}. Selecting strikes based on premium.")
-                                callSym, data_CE = self.OptChain(lastIndexTimeData[1], "CE", df.at[lastIndexTimeData[1], "c"], baseSym, data_PE, otm)
-                        else:
-                            self.strategyLogger.info(f"CE and PE premiums are equal at {self.humanTime}. Selecting strikes based on OTM factor.")
+                            data_CE = data["c"]
 
 
-                        self.entryOrder(data_CE, callSym, lotSize, "SELL", {"Expiry": expiryEpoch},)
-                        self.entryOrder(data_PE, putSym, lotSize, "SELL", {"Expiry": expiryEpoch},)
+                            putSym = self.getPutSym(
+                                self.timeData, baseSym, df.at[lastIndexTimeData[1], "c"],expiry= Currentexpiry, otmFactor=otm)
+                            
+                            strike = re.search(r'(\d+)(?=CE|PE)', putSym).group(1)
+
+                            if int(strike) % 100 != 0:
+                                self.strategyLogger.info(f"PE strike {strike} is not a valid strike. Adjusting OTM factor.")
+                                putSym = self.getPutSym(self.timeData, baseSym, df.at[lastIndexTimeData[1], "c"],expiry= Currentexpiry, otmFactor= otm-1)
+
+                            try:
+                                data = self.fetchAndCacheFnoHistData(
+                                    putSym, lastIndexTimeData[1])
+                            except Exception as e:
+                                self.strategyLogger.info(e)
+
+                            data_PE = data["c"]
+
+                            if data_CE > data_PE:
+                                if data_CE-data_PE > data_CE*0.1:
+                                    self.strategyLogger.info(f"CE premium {data_CE} is higher than PE premium {data_PE} at {self.humanTime}. Selecting strikes based on premium.")
+                                    putSym, data_PE = self.OptChain(lastIndexTimeData[1], "PE", df.at[lastIndexTimeData[1], "c"], baseSym, data_CE, otm)
+                            elif data_PE > data_CE:
+                                if data_PE-data_CE > data_PE*0.1:
+                                    self.strategyLogger.info(f"PE premium {data_PE} is higher than CE premium {data_CE} at {self.humanTime}. Selecting strikes based on premium.")
+                                    callSym, data_CE = self.OptChain(lastIndexTimeData[1], "CE", df.at[lastIndexTimeData[1], "c"], baseSym, data_PE, otm)
+                            else:
+                                self.strategyLogger.info(f"CE and PE premiums are equal at {self.humanTime}. Selecting strikes based on OTM factor.")
+
+
+                            self.entryOrder(data_CE, callSym, lotSize, "SELL", {"Expiry": expiryEpoch},)
+                            self.entryOrder(data_PE, putSym, lotSize, "SELL", {"Expiry": expiryEpoch},)
+
+                    else:
+                        if StraddlePremium_Cr < refrence_value:
+                            #Straddle Price Calculation
+                            callSym = self.getCallSym(
+                                self.timeData, baseSym, df.at[lastIndexTimeData[1], "c"],expiry= Currentexpiry)
+                            putSym = self.getPutSym(
+                                self.timeData, baseSym, df.at[lastIndexTimeData[1], "c"],expiry= Currentexpiry)
+
+                            try:
+                                data_CE = self.fetchAndCacheFnoHistData(
+                                    callSym, lastIndexTimeData[1])
+                                data_PE = self.fetchAndCacheFnoHistData(
+                                    putSym, lastIndexTimeData[1])
+                            except Exception as e:
+                                self.strategyLogger.info(e)
+                                self.strategyLogger.info(f"Error fetching data for {callSym} or {putSym} at {self.humanTime}. Skipping entry.")
+                                continue
+                            
+
+                            StraddlePremium = data_CE["c"] + data_PE["c"]
+                            self.strategyLogger.info(f"Straddle Premium at {self.humanTime} is {StraddlePremium}")
+                            
+                            otm = round((StraddlePremium*Perc)/50)
+                            self.strategyLogger.info(f"Calculated OTM factor is {otm} and Perc is {Perc}")
+
+                            
+                            #Entry for CE and PE legs with OTM factor
+                            callSym = self.getCallSym(
+                                self.timeData, baseSym, df.at[lastIndexTimeData[1], "c"],expiry= Currentexpiry, otmFactor=otm)
+                            
+                            strike = re.search(r'(\d+)(?=CE|PE)', callSym).group(1)
+
+                            if int(strike) % 100 != 0:
+                                self.strategyLogger.info(f"CE strike {strike} is not a valid strike. Adjusting OTM factor.")
+                                callSym = self.getCallSym(self.timeData, baseSym, df.at[lastIndexTimeData[1], "c"],expiry= Currentexpiry, otmFactor= otm-1)
+
+
+                            try:
+                                data = self.fetchAndCacheFnoHistData(
+                                    callSym, lastIndexTimeData[1])
+                            except Exception as e:
+                                self.strategyLogger.info(e)
+
+                            data_CE = data["c"]
+
+
+                            putSym = self.getPutSym(
+                                self.timeData, baseSym, df.at[lastIndexTimeData[1], "c"],expiry= Currentexpiry, otmFactor=otm)
+                            
+                            strike = re.search(r'(\d+)(?=CE|PE)', putSym).group(1)
+
+                            if int(strike) % 100 != 0:
+                                self.strategyLogger.info(f"PE strike {strike} is not a valid strike. Adjusting OTM factor.")
+                                putSym = self.getPutSym(self.timeData, baseSym, df.at[lastIndexTimeData[1], "c"],expiry= Currentexpiry, otmFactor= otm-1)
+
+                            try:
+                                data = self.fetchAndCacheFnoHistData(
+                                    putSym, lastIndexTimeData[1])
+                            except Exception as e:
+                                self.strategyLogger.info(e)
+
+                            data_PE = data["c"]
+
+                            if data_CE > data_PE:
+                                if data_CE-data_PE > data_CE*0.1:
+                                    self.strategyLogger.info(f"CE premium {data_CE} is higher than PE premium {data_PE} at {self.humanTime}. Selecting strikes based on premium.")
+                                    putSym, data_PE = self.OptChain(lastIndexTimeData[1], "PE", df.at[lastIndexTimeData[1], "c"], baseSym, data_CE, otm)
+                            elif data_PE > data_CE:
+                                if data_PE-data_CE > data_PE*0.1:
+                                    self.strategyLogger.info(f"PE premium {data_PE} is higher than CE premium {data_CE} at {self.humanTime}. Selecting strikes based on premium.")
+                                    callSym, data_CE = self.OptChain(lastIndexTimeData[1], "CE", df.at[lastIndexTimeData[1], "c"], baseSym, data_PE, otm)
+                            else:
+                                self.strategyLogger.info(f"CE and PE premiums are equal at {self.humanTime}. Selecting strikes based on OTM factor.")
+
+
+                            self.entryOrder(data_CE, callSym, lotSize, "SELL", {"Expiry": expiryEpoch},)
+                            self.entryOrder(data_PE, putSym, lotSize, "SELL", {"Expiry": expiryEpoch},)
 
 
 

@@ -105,9 +105,7 @@ class algoLogic(baseAlgoLogic):
 
         df_1d["CloseUp"] = np.where((df_1d["c"].shift(1) > df_1d["c"].shift(2)), 1, 0)
 
-        # Add 33360 to the index to match the timestamp
-        df_1d.index = df_1d.index + 33360
-        df_1d.ti = df_1d.ti + 33360
+        c
 
         df_1d = df_1d[df_1d.index >= ((startTimeEpoch-86340)-(86400*5))]
 
