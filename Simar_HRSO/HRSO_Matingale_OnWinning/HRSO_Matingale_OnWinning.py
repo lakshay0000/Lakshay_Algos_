@@ -290,7 +290,7 @@ class algoLogic(optOverNightAlgoLogic):
 
 
             # Check for exit conditions and execute exit orders
-            if not self.openPnl.empty:
+            if not self.openPnl.empty:           
                 for index, row in self.openPnl.iterrows():
 
                     symSide = row["Symbol"]
