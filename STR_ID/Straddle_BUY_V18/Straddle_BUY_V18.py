@@ -14,28 +14,11 @@ from backtestTools.histData import getFnoBacktestData
 # Define a class algoLogic that inherits from optOverNightAlgoLogic
 class algoLogic(optOverNightAlgoLogic):
 
-    def Exit_Lowest_Strangle(self):
-        strad_pairs = {}
-                
-        for strad_num in self.openPnl['Strad_Num'].unique():
-            strad_positions = self.openPnl[self.openPnl['Strad_Num'] == strad_num]
-            combined_price = strad_positions['CurrentPrice'].sum()
-            strad_pairs[strad_num] = {
-                        'combined_price': combined_price,
-                        'positions': strad_positions
-                    }
-                
-                # Get the straddle with the lowest combined price
-        min_strad_num = min(strad_pairs, key=lambda x: strad_pairs[x]['combined_price'])
-        min_strad_positions = strad_pairs[min_strad_num]['positions']
-                
-        self.strategyLogger.info(f"Exiting straddle {min_strad_num} with combined price {strad_pairs[min_strad_num]['combined_price']}")
-                
-                # Exit both positions in the lowest-priced pair
-        for index in min_strad_positions.index:
-            self.exitOrder(index, "LowestPrice_Exit")
+    def squareoff(self):
+        for index, row in self.openPnl.iterrows():
+            self.exitOrder(index, "StraddleExit")
 
-    def OptChain(self, date, symbol, IndexPrice, baseSym, Strangle_data, otm):       
+    def OptChain(self, date, symbol, IndexPrice, baseSym, Strangle_data, otm):
         prev_premium = None
         prev_symbol = None
         nearest_premium = None
@@ -135,7 +118,7 @@ class algoLogic(optOverNightAlgoLogic):
     def run(self, startDate, endDate, baseSym, indexSym):
 
         # Add necessary columns to the DataFrame
-        col = ["Target", "stoploss", "Expiry", "Trailing_Target", "Strad_Num"]  # Add "Trailing_Flag" if needed
+        col = ["Target", "stoploss", "Expiry", "Trailing_Target"]  # Add "Trailing_Flag" if needed
         self.addColumnsToOpenPnlDf(col)
 
         # Convert start and end dates to timestamps
@@ -170,13 +153,13 @@ class algoLogic(optOverNightAlgoLogic):
         putentryallowed = False
         callentryallowed = False
         Perc = 2  
+        n = 4
         straddle_data = []  # List of dicts with timestamp and premium
         straddle_ema = []   # List of EMA values 
         current_ema = None
         refrence_value = None
         main_Trade = True
         EntryAllowed = True
-        n=0
 
 
         
@@ -229,7 +212,7 @@ class algoLogic(optOverNightAlgoLogic):
                 expiryDatetime = datetime.strptime(Currentexpiry, "%d%b%y").replace(hour=15, minute=20)
                 expiryEpoch= expiryDatetime.timestamp()
                 Perc = 2  
-                n=0
+                n = 4
                 straddle_data = []  # List of dicts with timestamp and premium
                 straddle_ema = []   # List of EMA values 
                 current_ema = None
@@ -237,19 +220,15 @@ class algoLogic(optOverNightAlgoLogic):
                 EntryAllowed = True
 
 
-            # if not self.openPnl.empty:
-            #     Current_strangle_value = self.openPnl['CurrentPrice'].sum()
-            #     open_sum = self.openPnl['Pnl'].sum()
-            #     pnnl_sum = sum(pnnl) 
-            #     self.strategyLogger.info(f"pnl_sum:{open_sum + pnnl_sum}")
+            if not self.openPnl.empty:
+                Current_strangle_value = self.openPnl['CurrentPrice'].sum()
+                Entry_strangle_value = self.openPnl['EntryPrice'].sum()
+                self.strategyLogger.info(f"Current Strangle Value: {Current_strangle_value}, Entry Strangle Value: {Entry_strangle_value}")
 
-            #     if (open_sum + pnnl_sum) <= -6000:
-            #         for index, row in self.openPnl.iterrows():
-            #             self.exitOrder(index, "MaxLoss")
-            #             EntryAllowed = False
-            #             pnnl = []
-            #             i = 3
-            #             i_CanChange = False
+                if Current_strangle_value <= Entry_strangle_value * 0.5:
+                    n = 2 
+                    self.strategyLogger.info(f"Strangle value has reduced by 50%. Setting n to {n} for exit conditions.")
+
 
             if ((timeData-60) in df.index) and self.humanTime.time() < time(15, 20) and self.humanTime.date() == expiryDatetime.date():
                 # ... existing code to calculate callSym, putSym ...
@@ -305,241 +284,191 @@ class algoLogic(optOverNightAlgoLogic):
 
 
             if not self.openPnl.empty and current_ema is not None:
-                # Group positions by strad_Num and process each pair
-                for strad_num in self.openPnl['Strad_Num'].unique():
-                    strad_positions = self.openPnl[self.openPnl['Strad_Num'] == strad_num]
-
-                    if len(strad_positions) == 2:
-                        # Get the two positions
-                        row1 = strad_positions.iloc[0]
-                        row2 = strad_positions.iloc[1]
+                if len(self.openPnl) == 2:
+                    # Get the two positions
+                    row1 = self.openPnl.iloc[0]
+                    row2 = self.openPnl.iloc[1]
+                    
+                    price1 = row1["CurrentPrice"]
+                    price2 = row2["CurrentPrice"]
+                    
+                    # Check if one position's price is half or less than the other
+                    if price1 * n <= price2:
+                        # Exit position 1 (smaller price), keep position 2
+                        self.strategyLogger.info(f"Position {row1['Symbol']} price ({price1}) is half of {row2['Symbol']} price ({price2}). Exiting {row1['Symbol']}.")
+                        doubled_price = price2
+                        Half_price = price1
+                        symSide = row1["Symbol"]
+                        symSide = symSide[len(symSide) - 2:]
+                        self.strategyLogger.info(f"Doubled price for remaining position: {doubled_price} and symbol side is {symSide}")
+                        n=4
                         
-                        price1 = row1["CurrentPrice"]
-                        price2 = row2["CurrentPrice"]
-
-                        row1_index = row1.name
-                        row2_index = row2.name
-                        
-                        
-                        # Check if one position's price is half or less than the other
-                        if (price1 * 4) <= price2:
-                            # Exit position 1 (smaller price), keep position 2
-                            self.strategyLogger.info(f"Position {row1['Symbol']} price ({price1}) is half of {row2['Symbol']} price ({price2}). Exiting {row1['Symbol']}.")
-                            doubled_price = price2
-                            Half_price = price1
-                            symSide = row1["Symbol"]
-                            symSide = symSide[len(symSide) - 2:]
-                            self.strategyLogger.info(f"Doubled price for remaining position: {doubled_price} and symbol side is {symSide}")
-                            
-                            if current_ema < refrence_value:
-                                if symSide == "CE":
-                                    callSym = self.getCallSym(
-                                        self.timeData, baseSym, df.at[lastIndexTimeData[1], "c"],expiry= Currentexpiry, otmFactor= 1)
-                                    
-                                    otmstk = re.search(r'(\d+)(?=CE)', callSym).group(1)
-
-                                    callSym, Data_CE = self.OptChain(lastIndexTimeData[1], "CE", df.at[lastIndexTimeData[1], "c"], baseSym, doubled_price, otm=15)
-                                    
-                                    stk = re.search(r'(\d+)(?=CE)', callSym).group(1)
-
-                                    
-                                    if stk > otmstk:
-                                        if Data_CE < 1:
-                                            self.exitOrder(row2_index, "Prm_lessThan1")
-                                        else:
-                                            n = n + 1
-                                            self.openPnl.at[row2_index, "Strad_Num"] = n
-                                            self.entryOrder(Data_CE, callSym, lotSize, "SELL", {"Expiry": expiryEpoch, "Strad_Num": n},)
-
-
-                                        putSym, Data_PE = self.OptChain(lastIndexTimeData[1], "PE", df.at[lastIndexTimeData[1], "c"], baseSym, Half_price , otm=15)
-                                        if Data_PE < 1:
-                                            self.exitOrder(row1_index, "Prm_lessThan1")
-                                        else:   
-                                            n = n + 1
-                                            self.openPnl.at[row1_index, "Strad_Num"] = n
-                                            self.entryOrder(Data_PE, putSym, lotSize, "SELL", {"Expiry": expiryEpoch, "Strad_Num": n},)
-
-                                    else:
-                                        self.exitOrder(row2_index, "Prm_lessThan1")
-                                        putSym, Data_PE = self.OptChain(lastIndexTimeData[1], "PE", df.at[lastIndexTimeData[1], "c"], baseSym, Half_price , otm=15)
-                                        if Data_PE < 1:
-                                            self.exitOrder(row1_index, "Prm_lessThan1")
-                                        else:   
-                                            n = n + 1
-                                            self.openPnl.at[row1_index, "Strad_Num"] = n
-                                            self.entryOrder(Data_PE, putSym, lotSize, "SELL", {"Expiry": expiryEpoch, "Strad_Num": n},)
-
-
-                                elif symSide == "PE":
-                                    putSym = self.getPutSym(
-                                        self.timeData, baseSym, df.at[lastIndexTimeData[1], "c"],expiry= Currentexpiry, otmFactor= 1)
-                                    
-                                    otmstk = re.search(r'(\d+)(?=PE)', putSym).group(1)
-
-                                    putSym, Data_PE = self.OptChain(lastIndexTimeData[1], "PE", df.at[lastIndexTimeData[1], "c"], baseSym, doubled_price, otm=15)
-                                    stk = re.search(r'(\d+)(?=PE)', putSym).group(1)
-                                    
-                                    if stk < otmstk:
-                                        if Data_PE < 1:
-                                            self.exitOrder(row2_index, "Prm_lessThan1")
-                                        else:
-                                            n = n + 1
-                                            self.openPnl.at[row2_index, "Strad_Num"] = n
-                                            self.entryOrder(Data_PE, putSym, lotSize, "SELL", {"Expiry": expiryEpoch, "Strad_Num": n},)
-                                            
-
-                                        callSym, Data_CE = self.OptChain(lastIndexTimeData[1], "CE", df.at[lastIndexTimeData[1], "c"], baseSym, Half_price , otm=15)
-                                        if Data_CE < 1:
-                                            self.exitOrder(row1_index, "Prm_lessThan1")
-                                        else:
-                                            n = n + 1
-                                            self.openPnl.at[row1_index, "Strad_Num"] = n
-                                            self.entryOrder(Data_CE, callSym, lotSize, "SELL", {"Expiry": expiryEpoch, "Strad_Num": n},)
-
-                                    else:
-                                        self.exitOrder(row2_index, "Prm_lessThan1")
-                                        callSym, Data_CE = self.OptChain(lastIndexTimeData[1], "CE", df.at[lastIndexTimeData[1], "c"], baseSym, Half_price , otm=15)
-                                        if Data_CE < 1:
-                                            self.exitOrder(row1_index, "Prm_lessThan1")
-                                        else:
-                                            n = n + 1
-                                            self.openPnl.at[row1_index, "Strad_Num"] = n
-                                            self.entryOrder(Data_CE, callSym, lotSize, "SELL", {"Expiry": expiryEpoch, "Strad_Num": n},)
-
-                            else:
-                                self.exitOrder(row2_index, "SwitchOff_bigger_price_Exit")
-                                if symSide == "CE":
-                                    putSym, Data_PE = self.OptChain(lastIndexTimeData[1], "PE", df.at[lastIndexTimeData[1], "c"], baseSym, Half_price , otm=15)
-                                    if Data_PE < 1:
-                                        self.exitOrder(row1_index, "Prm_lessThan1")
-                                    else:   
-                                        n = n + 1
-                                        self.openPnl.at[row1_index, "Strad_Num"] = n
-                                        self.entryOrder(Data_PE, putSym, lotSize, "SELL", {"Expiry": expiryEpoch, "Strad_Num": n},)
-                                elif symSide == "PE":
-                                    callSym, Data_CE = self.OptChain(lastIndexTimeData[1], "CE", df.at[lastIndexTimeData[1], "c"], baseSym, Half_price , otm=15)
-                                    if Data_CE < 1:
-                                        self.exitOrder(row1_index, "Prm_lessThan1")
-                                    else:
-                                        n = n + 1
-                                        self.openPnl.at[row1_index, "Strad_Num"] = n
-                                        self.entryOrder(Data_CE, callSym, lotSize, "SELL", {"Expiry": expiryEpoch, "Strad_Num": n},)
-
-
-                        
-                        elif (price2 * 4) <= price1:
-                            # Exit position 2 (smaller price), keep position 1
-                            self.strategyLogger.info(f"Position {row2['Symbol']} price ({price2}) is half of {row1['Symbol']} price ({price1}). Exiting {row2['Symbol']}.")
-                            doubled_price = price1
-                            Half_price = price2
-                            self.strategyLogger.info(f"Doubled price for remaining position: {doubled_price}")
-                            symSide = row2["Symbol"]
-                            symSide = symSide[len(symSide) - 2:]
-                            self.strategyLogger.info(f"Doubled price for remaining position: {doubled_price} and symbol side is {symSide}")
-
-                            if current_ema < refrence_value:
+                        if current_ema < refrence_value:
+                            if symSide == "CE":
+                                callSym = self.getCallSym(
+                                    self.timeData, baseSym, df.at[lastIndexTimeData[1], "c"],expiry= Currentexpiry, otmFactor= 1)
                                 
-                                if symSide == "CE":
-                                    callSym = self.getCallSym(
-                                        self.timeData, baseSym, df.at[lastIndexTimeData[1], "c"],expiry= Currentexpiry, otmFactor= 1)
+                                otmstk = re.search(r'(\d+)(?=CE)', callSym).group(1)
 
-                                    otmstk = re.search(r'(\d+)(?=CE)', callSym).group(1)
+                                callSym, Data_CE = self.OptChain(lastIndexTimeData[1], "CE", df.at[lastIndexTimeData[1], "c"], baseSym, doubled_price, otm=15)
+                                
+                                stk = re.search(r'(\d+)(?=CE)', callSym).group(1)
 
+                                
+                                if stk > otmstk and Data_CE < 10:
+                                    self.exitOrder(self.openPnl.index[0], "Half_Exit")
                                     callSym, Data_CE = self.OptChain(lastIndexTimeData[1], "CE", df.at[lastIndexTimeData[1], "c"], baseSym, doubled_price, otm=15)
-                                    stk = re.search(r'(\d+)(?=CE)', callSym).group(1)
-
-                                    
-                                    if stk > otmstk:
-                                        if Data_CE < 1:
-                                            self.exitOrder(row1_index, "Prm_lessThan1")
-                                        else:
-                                            n = n + 1
-                                            self.openPnl.at[row1_index, "Strad_Num"] = n
-                                            self.entryOrder(Data_CE, callSym, lotSize, "SELL", {"Expiry": expiryEpoch, "Strad_Num": n},)
-
-
-                                        putSym, Data_PE = self.OptChain(lastIndexTimeData[1], "PE", df.at[lastIndexTimeData[1], "c"], baseSym, Half_price , otm=15)
-                                        if Data_PE < 1:
-                                            self.exitOrder(row2_index, "Prm_lessThan1")
-                                        else:   
-                                            n = n + 1
-                                            self.openPnl.at[row2_index, "Strad_Num"] = n
-                                            self.entryOrder(Data_PE, putSym, lotSize, "SELL", {"Expiry": expiryEpoch, "Strad_Num": n},)
-
+                                    if Data_CE < 1:
+                                        self.squareoff()
+                                        if Perc == 2:
+                                            Perc = 1
+                                        elif Perc == 1:
+                                            EntryAllowed = False
+                                            self.strategyLogger.info(f"Setting EntryAllowed to False. No further entries will be taken.")
                                     else:
-                                        self.exitOrder(row1_index, "Prm_lessThan1")
-                                        putSym, Data_PE = self.OptChain(lastIndexTimeData[1], "PE", df.at[lastIndexTimeData[1], "c"], baseSym, Half_price , otm=15)
-                                        if Data_PE < 1:
-                                            self.exitOrder(row2_index, "Prm_lessThan1")
-                                        else:   
-                                            n = n + 1
-                                            self.openPnl.at[row2_index, "Strad_Num"] = n
-                                            self.entryOrder(Data_PE, putSym, lotSize, "SELL", {"Expiry": expiryEpoch, "Strad_Num": n},)
-                                        
-
-                                elif symSide == "PE":
-                                    putSym = self.getPutSym(
-                                        self.timeData, baseSym, df.at[lastIndexTimeData[1], "c"],expiry= Currentexpiry, otmFactor= 1)
-                                    
-                                    otmstk = re.search(r'(\d+)(?=PE)', putSym).group(1)
-
-                                    putSym, Data_PE = self.OptChain(lastIndexTimeData[1], "PE", df.at[lastIndexTimeData[1], "c"], baseSym, doubled_price, otm=15)
-                                    stk = re.search(r'(\d+)(?=PE)', putSym).group(1)
-                                    
-                                    if stk < otmstk:
-                                        if Data_PE < 1:
-                                            self.exitOrder(row1_index, "Prm_lessThan1")
-                                        else:
-                                            n = n + 1
-                                            self.openPnl.at[row1_index, "Strad_Num"] = n
-                                            self.entryOrder(Data_PE, putSym, lotSize, "SELL", {"Expiry": expiryEpoch, "Strad_Num": n},)
-                                            
-
-                                        callSym, Data_CE = self.OptChain(lastIndexTimeData[1], "CE", df.at[lastIndexTimeData[1], "c"], baseSym, Half_price , otm=15)
-                                        if Data_CE < 1:
-                                            self.exitOrder(row2_index, "Prm_lessThan1")
-                                        else:
-                                            n = n + 1
-                                            self.openPnl.at[row2_index, "Strad_Num"] = n
-                                            self.entryOrder(Data_CE, callSym, lotSize, "SELL", {"Expiry": expiryEpoch, "Strad_Num": n},)
-
-                                    else:
-                                        self.exitOrder(row1_index, "Prm_lessThan1")
-                                        callSym, Data_CE = self.OptChain(lastIndexTimeData[1], "CE", df.at[lastIndexTimeData[1], "c"], baseSym, Half_price , otm=15)
-                                        if Data_CE < 1:
-                                            self.exitOrder(row2_index, "Prm_lessThan1")
-                                        else:
-                                            n = n + 1
-                                            self.openPnl.at[row2_index, "Strad_Num"] = n
-                                            self.entryOrder(Data_CE, callSym, lotSize, "SELL", {"Expiry": expiryEpoch, "Strad_Num": n},)
-                                        
-                            else:
-                                self.exitOrder(row1_index, "SwitchOff_bigger_price_Exit")
-                                if symSide == "CE":
+                                        self.entryOrder(Data_CE, callSym, lotSize, "SELL", {"Expiry": expiryEpoch},)
+                                else:
+                                    self.exitOrder(self.openPnl.index[1], "Half_Exit")
                                     putSym, Data_PE = self.OptChain(lastIndexTimeData[1], "PE", df.at[lastIndexTimeData[1], "c"], baseSym, Half_price , otm=15)
                                     if Data_PE < 1:
-                                        self.exitOrder(row2_index, "Prm_lessThan1")
+                                        self.squareoff()
+                                        if Perc == 2:
+                                            Perc = 1
+                                        elif Perc == 1:
+                                            EntryAllowed = False
+                                            self.strategyLogger.info(f"Setting EntryAllowed to False. No further entries will be taken.")
                                     else:   
-                                        n = n + 1
-                                        self.openPnl.at[row2_index, "Strad_Num"] = n
-                                        self.entryOrder(Data_PE, putSym, lotSize, "SELL", {"Expiry": expiryEpoch, "Strad_Num": n},)
-                                elif symSide == "PE":
+                                        self.entryOrder(Data_PE, putSym, lotSize, "SELL", {"Expiry": expiryEpoch},)
+
+
+                            elif symSide == "PE":
+                                putSym = self.getPutSym(
+                                    self.timeData, baseSym, df.at[lastIndexTimeData[1], "c"],expiry= Currentexpiry, otmFactor= 1)
+                                
+                                otmstk = re.search(r'(\d+)(?=PE)', putSym).group(1)
+
+                                putSym, Data_PE = self.OptChain(lastIndexTimeData[1], "PE", df.at[lastIndexTimeData[1], "c"], baseSym, doubled_price, otm=15)
+                                stk = re.search(r'(\d+)(?=PE)', putSym).group(1)
+                                
+                                if stk < otmstk and Data_PE < 10:
+                                    self.exitOrder(self.openPnl.index[0], "Half_Exit")
+                                    putSym, Data_PE = self.OptChain(lastIndexTimeData[1], "PE", df.at[lastIndexTimeData[1], "c"], baseSym, doubled_price, otm=15)
+                                    if Data_PE < 1:
+                                        self.squareoff()
+                                        if Perc == 2:
+                                            Perc = 1
+                                        elif Perc == 1:
+                                            EntryAllowed = False
+                                            self.strategyLogger.info(f"Setting EntryAllowed to False. No further entries will be taken.")
+                                    else:
+                                        self.entryOrder(Data_PE, putSym, lotSize, "SELL", {"Expiry": expiryEpoch},)
+                                else:
+                                    self.exitOrder(self.openPnl.index[1], "Half_Exit")
                                     callSym, Data_CE = self.OptChain(lastIndexTimeData[1], "CE", df.at[lastIndexTimeData[1], "c"], baseSym, Half_price , otm=15)
                                     if Data_CE < 1:
-                                        self.exitOrder(row2_index, "Prm_lessThan1")
+                                        self.squareoff()
+                                        if Perc == 2:
+                                            Perc = 1
+                                        elif Perc == 1:
+                                            EntryAllowed = False
+                                            self.strategyLogger.info(f"Setting EntryAllowed to False. No further entries will be taken.")
                                     else:
-                                        n = n + 1
-                                        self.openPnl.at[row2_index, "Strad_Num"] = n
-                                        self.entryOrder(Data_CE, callSym, lotSize, "SELL", {"Expiry": expiryEpoch, "Strad_Num": n},)
+                                        self.entryOrder(Data_CE, callSym, lotSize, "SELL", {"Expiry": expiryEpoch},)
+
+
+                        else:
+                            self.squareoff()
+
+                    
+                    elif price2 * n <= price1:
+                        # Exit position 2 (smaller price), keep position 1
+                        self.strategyLogger.info(f"Position {row2['Symbol']} price ({price2}) is half of {row1['Symbol']} price ({price1}). Exiting {row2['Symbol']}.")
+                        doubled_price = price1
+                        Half_price = price2
+                        self.strategyLogger.info(f"Doubled price for remaining position: {doubled_price}")
+                        symSide = row2["Symbol"]
+                        symSide = symSide[len(symSide) - 2:]
+                        self.strategyLogger.info(f"Doubled price for remaining position: {doubled_price} and symbol side is {symSide}")
+                        n=4
+
+                        if current_ema < refrence_value:
+                            
+                            if symSide == "CE":
+                                callSym = self.getCallSym(
+                                        self.timeData, baseSym, df.at[lastIndexTimeData[1], "c"],expiry= Currentexpiry, otmFactor= 1)
+
+                                otmstk = re.search(r'(\d+)(?=CE)', callSym).group(1)
+
+                                callSym, Data_CE = self.OptChain(lastIndexTimeData[1], "CE", df.at[lastIndexTimeData[1], "c"], baseSym, doubled_price, otm=15)
+                                stk = re.search(r'(\d+)(?=CE)', callSym).group(1)
+
+                                
+                                if stk > otmstk and Data_CE < 10:
+                                    self.exitOrder(self.openPnl.index[1], "Half_Exit")
+                                    callSym, Data_CE = self.OptChain(lastIndexTimeData[1], "CE", df.at[lastIndexTimeData[1], "c"], baseSym, doubled_price, otm=15)
+                                    if Data_CE < 1:
+                                        self.squareoff()
+                                        if Perc == 2:
+                                            Perc = 1
+                                        elif Perc == 1:
+                                            EntryAllowed = False
+                                            self.strategyLogger.info(f"Setting EntryAllowed to False. No further entries will be taken.")
+                                    else:
+                                        self.entryOrder(Data_CE, callSym, lotSize, "SELL", {"Expiry": expiryEpoch},)
+                                else:
+                                    self.exitOrder(self.openPnl.index[0], "Half_Exit")
+                                    putSym, Data_PE = self.OptChain(lastIndexTimeData[1], "PE", df.at[lastIndexTimeData[1], "c"], baseSym, Half_price , otm=15)
+                                    if Data_PE < 1:
+                                        self.squareoff()
+                                        if Perc == 2:
+                                            Perc = 1
+                                        elif Perc == 1:
+                                            EntryAllowed = False
+                                            self.strategyLogger.info(f"Setting EntryAllowed to False. No further entries will be taken.")
+                                    else:
+                                        self.entryOrder(Data_PE, putSym, lotSize, "SELL", {"Expiry": expiryEpoch},)
+
+                            elif symSide == "PE":
+                                putSym = self.getPutSym(
+                                    self.timeData, baseSym, df.at[lastIndexTimeData[1], "c"],expiry= Currentexpiry, otmFactor= 1)
+                                
+                                otmstk = re.search(r'(\d+)(?=PE)', putSym).group(1)
+
+                                putSym, Data_PE = self.OptChain(lastIndexTimeData[1], "PE", df.at[lastIndexTimeData[1], "c"], baseSym, doubled_price, otm=15)
+                                stk = re.search(r'(\d+)(?=PE)', putSym).group(1)
+                                
+                                if stk < otmstk and Data_PE < 10:
+                                    self.exitOrder(self.openPnl.index[1], "Half_Exit")
+                                    putSym, Data_PE = self.OptChain(lastIndexTimeData[1], "PE", df.at[lastIndexTimeData[1], "c"], baseSym, doubled_price, otm=15)
+                                    if Data_PE < 1:
+                                        self.squareoff()
+                                        if Perc == 2:
+                                            Perc = 1
+                                        elif Perc == 1:
+                                            EntryAllowed = False
+                                            self.strategyLogger.info(f"Setting EntryAllowed to False. No further entries will be taken.")
+                                    else:
+                                        self.entryOrder(Data_PE, putSym, lotSize, "SELL", {"Expiry": expiryEpoch},)
+                                else:
+                                    self.exitOrder(self.openPnl.index[0], "Half_Exit")
+                                    callSym, Data_CE = self.OptChain(lastIndexTimeData[1], "CE", df.at[lastIndexTimeData[1], "c"], baseSym, Half_price , otm=15)
+                                    if Data_CE < 1:
+                                        self.squareoff()
+                                        if Perc == 2:
+                                            Perc = 1
+                                        elif Perc == 1:
+                                            EntryAllowed = False
+                                            self.strategyLogger.info(f"Setting EntryAllowed to False. No further entries will be taken.")
+                                    else:
+                                        self.entryOrder(Data_CE, callSym, lotSize, "SELL", {"Expiry": expiryEpoch},)
+
+                                    
+                        else:
+                            self.squareoff()
 
 
             # callCounter= self.openPnl['Symbol'].str[-2:].value_counts().get('CE',0)
             # putCounter= self.openPnl['Symbol'].str[-2:].value_counts().get('PE',0)
-
-            if len(self.openPnl) >= 6:
-                # Find the straddle pair with the lowest combined current price
-                self.Exit_Lowest_Strangle()         
 
             
 
@@ -550,19 +479,19 @@ class algoLogic(optOverNightAlgoLogic):
                     if self.humanTime.time() >= time(9, 25):
                         if current_ema is None or current_ema < refrence_value:
                             #Straddle Price Calculation
-                            callSym_ATM = self.getCallSym(
+                            callSym = self.getCallSym(
                                 self.timeData, baseSym, df.at[lastIndexTimeData[1], "c"],expiry= Currentexpiry)
-                            putSym_ATM = self.getPutSym(
+                            putSym = self.getPutSym(
                                 self.timeData, baseSym, df.at[lastIndexTimeData[1], "c"],expiry= Currentexpiry)
 
                             try:
                                 data_CE = self.fetchAndCacheFnoHistData(
-                                    callSym_ATM, lastIndexTimeData[1])
+                                    callSym, lastIndexTimeData[1])
                                 data_PE = self.fetchAndCacheFnoHistData(
-                                    putSym_ATM, lastIndexTimeData[1])
+                                    putSym, lastIndexTimeData[1])
                             except Exception as e:
                                 self.strategyLogger.info(e)
-                                self.strategyLogger.info(f"Error fetching data for {callSym_ATM} or {putSym_ATM} at {self.humanTime}. Skipping entry.")
+                                self.strategyLogger.info(f"Error fetching data for {callSym} or {putSym} at {self.humanTime}. Skipping entry.")
                                 continue
                             
 
@@ -629,30 +558,27 @@ class algoLogic(optOverNightAlgoLogic):
                                     EntryAllowed = False
                                     self.strategyLogger.info(f"Setting EntryAllowed to False. No further entries will be taken.")
                                 continue
- 
-                            n = n + 1
-                            self.strategyLogger.info(f"Entry number for the day: {n}")
 
 
-                            self.entryOrder(data_CE, callSym, lotSize, "SELL", {"Expiry": expiryEpoch, "Strad_Num": n},)
-                            self.entryOrder(data_PE, putSym, lotSize, "SELL", {"Expiry": expiryEpoch, "Strad_Num": n},)
+                            self.entryOrder(data_CE, callSym, lotSize, "SELL", {"Expiry": expiryEpoch},)
+                            self.entryOrder(data_PE, putSym, lotSize, "SELL", {"Expiry": expiryEpoch},)
 
                     else:
                         if StraddlePremium_Cr < refrence_value:
                             #Straddle Price Calculation
-                            callSym_ATM = self.getCallSym(
+                            callSym = self.getCallSym(
                                 self.timeData, baseSym, df.at[lastIndexTimeData[1], "c"],expiry= Currentexpiry)
-                            putSym_ATM = self.getPutSym(
+                            putSym = self.getPutSym(
                                 self.timeData, baseSym, df.at[lastIndexTimeData[1], "c"],expiry= Currentexpiry)
 
                             try:
                                 data_CE = self.fetchAndCacheFnoHistData(
-                                    callSym_ATM, lastIndexTimeData[1])
+                                    callSym, lastIndexTimeData[1])
                                 data_PE = self.fetchAndCacheFnoHistData(
-                                    putSym_ATM, lastIndexTimeData[1])
+                                    putSym, lastIndexTimeData[1])
                             except Exception as e:
                                 self.strategyLogger.info(e)
-                                self.strategyLogger.info(f"Error fetching data for {callSym_ATM} or {putSym_ATM} at {self.humanTime}. Skipping entry.")
+                                self.strategyLogger.info(f"Error fetching data for {callSym} or {putSym} at {self.humanTime}. Skipping entry.")
                                 continue
                             
 
@@ -720,14 +646,10 @@ class algoLogic(optOverNightAlgoLogic):
                                     EntryAllowed = False
                                     self.strategyLogger.info(f"Setting EntryAllowed to False. No further entries will be taken.")
                                 continue
-                            
-
-                            n = n + 1
-                            self.strategyLogger.info(f"Entry number for the day: {n}")
 
 
-                            self.entryOrder(data_CE, callSym, lotSize, "SELL", {"Expiry": expiryEpoch, "Strad_Num": n},)
-                            self.entryOrder(data_PE, putSym, lotSize, "SELL", {"Expiry": expiryEpoch, "Strad_Num": n},)
+                            self.entryOrder(data_CE, callSym, lotSize, "SELL", {"Expiry": expiryEpoch},)
+                            self.entryOrder(data_PE, putSym, lotSize, "SELL", {"Expiry": expiryEpoch},)
 
 
 
@@ -749,7 +671,7 @@ if __name__ == "__main__":
 
     # Define Start date and End date
     startDate = datetime(2023, 1, 1, 9, 15)
-    endDate = datetime(2025, 12, 31, 15, 30)
+    endDate = datetime(2026, 12, 31, 15, 30)
 
     # Create algoLogic object
     algo = algoLogic(devName, strategyName, version)

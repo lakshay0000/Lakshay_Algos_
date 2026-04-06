@@ -381,8 +381,8 @@ if __name__ == "__main__":
     version = "v1"
 
     # Define Start date and End date
-    startDate = datetime(2024, 1, 1, 9, 15)
-    endDate = datetime(2026, 3, 15, 15, 30)
+    startDate = datetime(2026, 3, 1, 9, 15)
+    endDate = datetime(2026, 4, 5, 15, 30)
 
     # Create algoLogic object
     algo = algoLogic(devName, strategyName, version)
