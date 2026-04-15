@@ -153,7 +153,7 @@ class algoLogic(optOverNightAlgoLogic):
 
         putentryallowed = False
         callentryallowed = False
-        Perc = 2  
+        Perc = 2
         n = 4
         straddle_data = []  # List of dicts with timestamp and premium
         straddle_ema = []   # List of EMA values 
@@ -213,7 +213,7 @@ class algoLogic(optOverNightAlgoLogic):
                 Currentexpiry = getExpiryData(self.timeData, baseSym)['CurrentExpiry']
                 expiryDatetime = datetime.strptime(Currentexpiry, "%d%b%y").replace(hour=15, minute=20)
                 expiryEpoch= expiryDatetime.timestamp()
-                Perc = 2  
+                Perc = 2
                 n = 4
                 straddle_data = []  # List of dicts with timestamp and premium
                 straddle_ema = []   # List of EMA values 
@@ -264,8 +264,9 @@ class algoLogic(optOverNightAlgoLogic):
                     StraddlePremium_Cr = data_CE["c"] + data_PE["c"]
                     self.strategyLogger.info(f"Straddle Premium at {self.humanTime} is {StraddlePremium_Cr}")
 
-                    if self.humanTime.time() == time(9, 16):
+                    if self.humanTime.time() >= time(9, 16) and refrence_value is None:
                         refrence_value = StraddlePremium_Cr
+                        self.strategyLogger.info(f"Setting reference value for EMA calculation: {refrence_value}")
                     
                     # APPEND TO STORAGE
                     straddle_data.append({
@@ -336,7 +337,7 @@ class algoLogic(optOverNightAlgoLogic):
                                 if stk > otmstk:
                                     self.exitOrder(self.openPnl.index[0], "Half_Exit")
                                     callSym, Data_CE = self.OptChain(lastIndexTimeData[1], "CE", df.at[lastIndexTimeData[1], "c"], baseSym, doubled_price, otm=15)
-                                    if Data_CE < 1:
+                                    if Data_CE < 5:
                                         self.squareoff()
                                         if Perc == 2:
                                             Perc = 1
@@ -348,7 +349,7 @@ class algoLogic(optOverNightAlgoLogic):
                                 else:
                                     self.exitOrder(self.openPnl.index[1], "Half_Exit")
                                     putSym, Data_PE = self.OptChain(lastIndexTimeData[1], "PE", df.at[lastIndexTimeData[1], "c"], baseSym, Half_price , otm=15)
-                                    if Data_PE < 1:
+                                    if Data_PE < 5:
                                         self.squareoff()
                                         if Perc == 2:
                                             Perc = 1
@@ -371,7 +372,7 @@ class algoLogic(optOverNightAlgoLogic):
                                 if stk < otmstk:
                                     self.exitOrder(self.openPnl.index[0], "Half_Exit")
                                     putSym, Data_PE = self.OptChain(lastIndexTimeData[1], "PE", df.at[lastIndexTimeData[1], "c"], baseSym, doubled_price, otm=15)
-                                    if Data_PE < 1:
+                                    if Data_PE < 5:
                                         self.squareoff()
                                         if Perc == 2:
                                             Perc = 1
@@ -383,7 +384,7 @@ class algoLogic(optOverNightAlgoLogic):
                                 else:
                                     self.exitOrder(self.openPnl.index[1], "Half_Exit")
                                     callSym, Data_CE = self.OptChain(lastIndexTimeData[1], "CE", df.at[lastIndexTimeData[1], "c"], baseSym, Half_price , otm=15)
-                                    if Data_CE < 1:
+                                    if Data_CE < 5:
                                         self.squareoff()
                                         if Perc == 2:
                                             Perc = 1
@@ -424,7 +425,7 @@ class algoLogic(optOverNightAlgoLogic):
                                 if stk > otmstk:
                                     self.exitOrder(self.openPnl.index[1], "Half_Exit")
                                     callSym, Data_CE = self.OptChain(lastIndexTimeData[1], "CE", df.at[lastIndexTimeData[1], "c"], baseSym, doubled_price, otm=15)
-                                    if Data_CE < 1:
+                                    if Data_CE < 5:
                                         self.squareoff()
                                         if Perc == 2:
                                             Perc = 1
@@ -436,7 +437,7 @@ class algoLogic(optOverNightAlgoLogic):
                                 else:
                                     self.exitOrder(self.openPnl.index[0], "Half_Exit")
                                     putSym, Data_PE = self.OptChain(lastIndexTimeData[1], "PE", df.at[lastIndexTimeData[1], "c"], baseSym, Half_price , otm=15)
-                                    if Data_PE < 1:
+                                    if Data_PE < 5:
                                         self.squareoff()
                                         if Perc == 2:
                                             Perc = 1
@@ -458,7 +459,7 @@ class algoLogic(optOverNightAlgoLogic):
                                 if stk < otmstk:
                                     self.exitOrder(self.openPnl.index[1], "Half_Exit")
                                     putSym, Data_PE = self.OptChain(lastIndexTimeData[1], "PE", df.at[lastIndexTimeData[1], "c"], baseSym, doubled_price, otm=15)
-                                    if Data_PE < 1:
+                                    if Data_PE < 5:
                                         self.squareoff()
                                         if Perc == 2:
                                             Perc = 1
@@ -470,7 +471,7 @@ class algoLogic(optOverNightAlgoLogic):
                                 else:
                                     self.exitOrder(self.openPnl.index[0], "Half_Exit")
                                     callSym, Data_CE = self.OptChain(lastIndexTimeData[1], "CE", df.at[lastIndexTimeData[1], "c"], baseSym, Half_price , otm=15)
-                                    if Data_CE < 1:
+                                    if Data_CE < 5:
                                         self.squareoff()
                                         if Perc == 2:
                                             Perc = 1
@@ -516,7 +517,7 @@ class algoLogic(optOverNightAlgoLogic):
                             StraddlePremium = data_CE["c"] + data_PE["c"]
                             self.strategyLogger.info(f"Straddle Premium at {self.humanTime} is {StraddlePremium}")
                             
-                            otm = round((StraddlePremium*Perc)/50)
+                            otm = round((StraddlePremium*Perc)/100)
                             self.strategyLogger.info(f"Calculated OTM factor is {otm} and Perc is {Perc}")
 
                             
@@ -568,8 +569,8 @@ class algoLogic(optOverNightAlgoLogic):
                             else:
                                 self.strategyLogger.info(f"CE and PE premiums are equal at {self.humanTime}. Selecting strikes based on OTM factor.")
 
-                            if data_CE < 1 or data_PE < 1:
-                                self.strategyLogger.info(f"One of the premiums is less than 1 (CE: {data_CE}, PE: {data_PE}). Skipping entry.")
+                            if data_CE < 5 or data_PE < 5:
+                                self.strategyLogger.info(f"One of the premiums is less than 5 (CE: {data_CE}, PE: {data_PE}). Skipping entry.")
                                 if Perc == 2:
                                     Perc = 1
                                 elif Perc == 1:
@@ -603,7 +604,7 @@ class algoLogic(optOverNightAlgoLogic):
                             StraddlePremium = data_CE["c"] + data_PE["c"]
                             self.strategyLogger.info(f"Straddle Premium at {self.humanTime} is {StraddlePremium}")
                             
-                            otm = round((StraddlePremium*Perc)/50)
+                            otm = round((StraddlePremium*Perc)/100)
                             self.strategyLogger.info(f"Calculated OTM factor is {otm} and Perc is {Perc}")
 
                             
@@ -656,8 +657,8 @@ class algoLogic(optOverNightAlgoLogic):
                                 self.strategyLogger.info(f"CE and PE premiums are equal at {self.humanTime}. Selecting strikes based on OTM factor.")
 
                             
-                            if data_CE < 1 or data_PE < 1:
-                                self.strategyLogger.info(f"One of the premiums is less than 1 (CE: {data_CE}, PE: {data_PE}). Skipping entry.")
+                            if data_CE < 5 or data_PE < 5:
+                                self.strategyLogger.info(f"One of the premiums is less than 5 (CE: {data_CE}, PE: {data_PE}). Skipping entry.")
                                 if Perc == 2:
                                     Perc = 1
                                 elif Perc == 1:
@@ -688,15 +689,15 @@ if __name__ == "__main__":
     version = "v1"
 
     # Define Start date and End date
-    startDate = datetime(2023, 1, 1, 9, 15)
+    startDate = datetime(2025, 1, 1, 9, 15)
     endDate = datetime(2026, 12, 31, 15, 30)
 
     # Create algoLogic object
     algo = algoLogic(devName, strategyName, version)
 
     # Define Index Name
-    baseSym = "NIFTY"
-    indexName = "NIFTY 50"
+    baseSym = "SENSEX"
+    indexName = "SENSEX"
 
     # Execute the algorithm
     closedPnl, fileDir = algo.run(startDate, endDate, baseSym, indexName)
