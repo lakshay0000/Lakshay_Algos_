@@ -42,7 +42,7 @@ class algoLogic(optOverNightAlgoLogic):
             StraddlePremium = data_CE["c"] + data_PE["c"]
             self.strategyLogger.info(f"Straddle Premium at {self.humanTime} is {StraddlePremium}")
             
-            otm = round((StraddlePremium * Perc) / 100)
+            otm = round((StraddlePremium * Perc) / 50)
             self.strategyLogger.info(f"Calculated OTM factor is {otm} and Perc is {Perc}")
             
             return otm
@@ -296,7 +296,7 @@ class algoLogic(optOverNightAlgoLogic):
 
 
 
-            if ((timeData-60) in df.index) and self.humanTime.time() < time(15, 20) and self.humanTime.date() == expiryDatetime.date():
+            if ((timeData-60) in df.index)and self.humanTime.time() >= time(13, 0) and self.humanTime.time() < time(15, 20) and self.humanTime.date() == expiryDatetime.date():
                 # ... existing code to calculate callSym, putSym ...
 
                 #Straddle Price Calculation
@@ -533,13 +533,13 @@ class algoLogic(optOverNightAlgoLogic):
             # Check for entry signals and execute orders
             if ((timeData-60) in df.index):
 
-                if self.openPnl.empty and self.humanTime.date() == expiryDatetime.date() and self.humanTime.time() >= time(9, 20) and self.humanTime.time() < time(15, 20):
+                if self.openPnl.empty and self.humanTime.date() == expiryDatetime.date() and self.humanTime.time() >= time(13, 0) and self.humanTime.time() < time(15, 20):
                     otm = self.getOTMFactor(baseSym, Currentexpiry, lastIndexTimeData, Perc, df)
 
-                    if EntryAllowed == True and StraddlePremium_Cr < refrence_value and otm is not None:                            
+                    if EntryAllowed == True and StraddlePremium_Cr < refrence_value and otm is not None:    
                         #Entry for CE and PE legs with OTM factor
                         callSym = self.getCallSym(
-                            self.timeData, baseSym, df.at[lastIndexTimeData[1], "c"],expiry= Currentexpiry, otmFactor=otm-1)
+                            self.timeData, baseSym, df.at[lastIndexTimeData[1], "c"],expiry= Currentexpiry, otmFactor=otm)
 
                         try:
                             data = self.fetchAndCacheFnoHistData(
@@ -551,7 +551,7 @@ class algoLogic(optOverNightAlgoLogic):
 
 
                         putSym = self.getPutSym(
-                            self.timeData, baseSym, df.at[lastIndexTimeData[1], "c"],expiry= Currentexpiry, otmFactor=otm-1)
+                            self.timeData, baseSym, df.at[lastIndexTimeData[1], "c"],expiry= Currentexpiry, otmFactor=otm)
 
                         try:
                             data = self.fetchAndCacheFnoHistData(
@@ -564,11 +564,11 @@ class algoLogic(optOverNightAlgoLogic):
                         if data_CE > data_PE:
                             if data_CE-data_PE > data_CE*0.1:
                                 self.strategyLogger.info(f"CE premium {data_CE} is higher than PE premium {data_PE} at {self.humanTime}. Selecting strikes based on premium.")
-                                putSym, data_PE = self.OptChain(lastIndexTimeData[1], "PE", df.at[lastIndexTimeData[1], "c"], baseSym, data_CE, otm-1)
+                                putSym, data_PE = self.OptChain(lastIndexTimeData[1], "PE", df.at[lastIndexTimeData[1], "c"], baseSym, data_CE, otm)
                         elif data_PE > data_CE:
                             if data_PE-data_CE > data_PE*0.1:
                                 self.strategyLogger.info(f"PE premium {data_PE} is higher than CE premium {data_CE} at {self.humanTime}. Selecting strikes based on premium.")
-                                callSym, data_CE = self.OptChain(lastIndexTimeData[1], "CE", df.at[lastIndexTimeData[1], "c"], baseSym, data_PE, otm-1)
+                                callSym, data_CE = self.OptChain(lastIndexTimeData[1], "CE", df.at[lastIndexTimeData[1], "c"], baseSym, data_PE, otm)
                         else:
                             self.strategyLogger.info(f"CE and PE premiums are equal at {self.humanTime}. Selecting strikes based on OTM factor.")
 
@@ -588,13 +588,13 @@ class algoLogic(optOverNightAlgoLogic):
 
 
 
-                    if StraddlePremium_Cr <= max_straddle_premium * 0.9 and otm is not None and First_Entry == True:
+                    if max_straddle_premium is not None and StraddlePremium_Cr is not None and StraddlePremium_Cr <= max_straddle_premium * 0.9 and otm is not None and First_Entry == True:
                         #Entry for CE and PE legs with OTM factor
                         refrence_value = StraddlePremium_Cr
                         self.strategyLogger.info(f"Straddle premium has reduced by 50% from the maximum premium. Setting reference value to current straddle premium: {refrence_value} for future comparisons.")
 
                         callSym = self.getCallSym(
-                            self.timeData, baseSym, df.at[lastIndexTimeData[1], "c"],expiry= Currentexpiry, otmFactor=otm-1)
+                            self.timeData, baseSym, df.at[lastIndexTimeData[1], "c"],expiry= Currentexpiry, otmFactor=otm)
 
                         try:
                             data = self.fetchAndCacheFnoHistData(
@@ -606,7 +606,7 @@ class algoLogic(optOverNightAlgoLogic):
 
 
                         putSym = self.getPutSym(
-                            self.timeData, baseSym, df.at[lastIndexTimeData[1], "c"],expiry= Currentexpiry, otmFactor=otm-1)
+                            self.timeData, baseSym, df.at[lastIndexTimeData[1], "c"],expiry= Currentexpiry, otmFactor=otm)
 
                         try:
                             data = self.fetchAndCacheFnoHistData(
@@ -619,13 +619,23 @@ class algoLogic(optOverNightAlgoLogic):
                         if data_CE > data_PE:
                             if data_CE-data_PE > data_CE*0.1:
                                 self.strategyLogger.info(f"CE premium {data_CE} is higher than PE premium {data_PE} at {self.humanTime}. Selecting strikes based on premium.")
-                                putSym, data_PE = self.OptChain(lastIndexTimeData[1], "PE", df.at[lastIndexTimeData[1], "c"], baseSym, data_CE, otm-1)
+                                putSym, data_PE = self.OptChain(lastIndexTimeData[1], "PE", df.at[lastIndexTimeData[1], "c"], baseSym, data_CE, otm)
                         elif data_PE > data_CE:
                             if data_PE-data_CE > data_PE*0.1:
                                 self.strategyLogger.info(f"PE premium {data_PE} is higher than CE premium {data_CE} at {self.humanTime}. Selecting strikes based on premium.")
-                                callSym, data_CE = self.OptChain(lastIndexTimeData[1], "CE", df.at[lastIndexTimeData[1], "c"], baseSym, data_PE, otm-1)
+                                callSym, data_CE = self.OptChain(lastIndexTimeData[1], "CE", df.at[lastIndexTimeData[1], "c"], baseSym, data_PE, otm)
                         else:
                             self.strategyLogger.info(f"CE and PE premiums are equal at {self.humanTime}. Selecting strikes based on OTM factor.")
+
+
+                        if data_CE < 1 or data_PE < 1:
+                            self.strategyLogger.info(f"One of the premiums is less than 5 (CE: {data_CE}, PE: {data_PE}). Skipping entry.")
+                            if Perc == 2:
+                                Perc = 1
+                            elif Perc == 1:
+                                EntryAllowed = False
+                                self.strategyLogger.info(f"Setting EntryAllowed to False. No further entries will be taken.")
+                            continue
 
 
                         self.entryOrder(data_CE, callSym, lotSize, "SELL", {"Expiry": expiryEpoch},)
@@ -658,8 +668,8 @@ if __name__ == "__main__":
     algo = algoLogic(devName, strategyName, version)
 
     # Define Index Name
-    baseSym = "SENSEX"
-    indexName = "SENSEX"
+    baseSym = "NIFTY"
+    indexName = "NIFTY 50"
 
     # Execute the algorithm
     closedPnl, fileDir = algo.run(startDate, endDate, baseSym, indexName)

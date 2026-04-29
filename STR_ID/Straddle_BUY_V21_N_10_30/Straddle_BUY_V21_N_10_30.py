@@ -438,10 +438,11 @@ class algoLogic(optOverNightAlgoLogic):
                                 elif Perc_B1 == 1:
                                     EntryAllowed_B1 = False
                                     self.strategyLogger.info(f"B1: EntryAllowed -> False")
-                                continue
-                            self.entryOrder(data_CE, callSym, lotSize, "SELL", {"Expiry": expiryEpoch, "Build": 1})
-                            self.entryOrder(data_PE, putSym, lotSize, "SELL", {"Expiry": expiryEpoch, "Build": 1})
-                            n_B1 = 4
+                                    
+                            else:
+                                self.entryOrder(data_CE, callSym, lotSize, "SELL", {"Expiry": expiryEpoch, "Build": 1})
+                                self.entryOrder(data_PE, putSym, lotSize, "SELL", {"Expiry": expiryEpoch, "Build": 1})
+                                n_B1 = 4
 
                     # B1: First entry at 10% decay
                     if StraddlePremium_Cr is not None and max_straddle_premium > 0 and StraddlePremium_Cr <= max_straddle_premium * 0.9 and otm_b1 is not None and First_Entry_B1 == True:
@@ -470,10 +471,11 @@ class algoLogic(optOverNightAlgoLogic):
                                 elif Perc_B2 == 1:
                                     EntryAllowed_B2 = False
                                     self.strategyLogger.info(f"B2: EntryAllowed -> False")
-                                continue
-                            self.entryOrder(data_CE, callSym, lotSize, "SELL", {"Expiry": expiryEpoch, "Build": 2})
-                            self.entryOrder(data_PE, putSym, lotSize, "SELL", {"Expiry": expiryEpoch, "Build": 2})
-                            n_B2 = 4
+
+                            else:
+                                self.entryOrder(data_CE, callSym, lotSize, "SELL", {"Expiry": expiryEpoch, "Build": 2})
+                                self.entryOrder(data_PE, putSym, lotSize, "SELL", {"Expiry": expiryEpoch, "Build": 2})
+                                n_B2 = 4
 
                     # B2: First entry at 30% decay
                     if StraddlePremium_Cr is not None and max_straddle_premium > 0 and StraddlePremium_Cr <= max_straddle_premium * 0.7 and otm_b2 is not None and First_Entry_B2 == True:

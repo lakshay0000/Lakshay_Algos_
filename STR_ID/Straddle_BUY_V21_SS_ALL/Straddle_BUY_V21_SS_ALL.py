@@ -10,7 +10,27 @@ from backtestTools.util import calculateDailyReport, limitCapital, generateRepor
 from backtestTools.histData import getFnoBacktestData
 
 
+# ============================================================
+# HARD-CODED: Number of builds to deploy
+# Decay thresholds: Build 1 = 10%, Build 2 = 30%, Build 3 = 50%, ...
+# Formula: decay_pct = 10 + (build_num - 1) * 20
+# Multiplier: max_straddle * (1 - decay_pct/100)
+# ============================================================
+NUM_BUILDS = 3  # <-- Change this to 2, 3, 4, ... as needed
+
+
 class algoLogic(optOverNightAlgoLogic):
+
+    @staticmethod
+    def _decay_multiplier(build_num):
+        """Return the fraction of max straddle premium at which build_num enters.
+        Build 1 -> 0.90  (10% decay)
+        Build 2 -> 0.70  (30% decay)
+        Build 3 -> 0.50  (50% decay)
+        Build N -> 1 - (0.10 + (N-1)*0.20)
+        """
+        decay_pct = 10 + (build_num - 1) * 20
+        return 1 - decay_pct / 100
 
     def getOTMFactor(self, baseSym, Currentexpiry, lastIndexTimeData, Perc, df):
         try:
@@ -22,7 +42,7 @@ class algoLogic(optOverNightAlgoLogic):
             data_PE = self.fetchAndCacheFnoHistData(putSym, lastIndexTimeData[1])
             StraddlePremium = data_CE["c"] + data_PE["c"]
             self.strategyLogger.info(f"Straddle Premium at {self.humanTime} is {StraddlePremium}")
-            otm = round((StraddlePremium * Perc) / 50) 
+            otm = round((StraddlePremium * Perc) / 100)
             self.strategyLogger.info(f"Calculated OTM factor is {otm} and Perc is {Perc}")
             return otm
         except Exception as e:
@@ -220,6 +240,25 @@ class algoLogic(optOverNightAlgoLogic):
 
         return Perc, EntryAllowed
 
+    # ────────────────────────────────────────────────────────
+    # Helper: initialise / reset per-build state dicts
+    # ────────────────────────────────────────────────────────
+    @staticmethod
+    def _init_build_state():
+        """Return fresh per-build state dictionaries for all NUM_BUILDS."""
+        Perc = {}
+        n = {}
+        EntryAllowed = {}
+        First_Entry = {}
+        refrence_value = {}
+        for b in range(1, NUM_BUILDS + 1):
+            Perc[b] = 2
+            n[b] = 4
+            EntryAllowed[b] = False
+            First_Entry[b] = True
+            refrence_value[b] = None
+        return Perc, n, EntryAllowed, First_Entry, refrence_value
+
     def run(self, startDate, endDate, baseSym, indexSym):
         col = ["Target", "stoploss", "Expiry", "Trailing_Target", "Build"]
         self.addColumnsToOpenPnlDf(col)
@@ -234,7 +273,7 @@ class algoLogic(optOverNightAlgoLogic):
             raise Exception(e)
 
         df.dropna(inplace=True)
-        df.to_csv(f"{self.fileDir['backtestResultsCandleData']}{indexName}_1Min.csv")
+        df.to_csv(f"{self.fileDir['backtestResultsCandleData']}{indexSym}_1Min.csv")
 
         lastIndexTimeData = [0, 0]
         Currentexpiry = getExpiryData(startEpoch, baseSym)['CurrentExpiry']
@@ -242,26 +281,16 @@ class algoLogic(optOverNightAlgoLogic):
         expiryEpoch = expiryDatetime.timestamp()
         lotSize = int(getExpiryData(self.timeData, baseSym)["LotSize"])
 
-        # Build 1 state (20% decay)
-        Perc_B1 = 2
-        n_B1 = 4
-        EntryAllowed_B1 = False
-        First_Entry_B1 = True
+        # ── Per-build state (dynamic) ──
+        Perc, n, EntryAllowed, First_Entry, refrence_value = self._init_build_state()
 
-        # Build 2 state (40% decay)
-        Perc_B2 = 2
-        n_B2 = 4
-        EntryAllowed_B2 = False
-        First_Entry_B2 = True
-
-        MaxLoss_Hit = False
+        # Log decay thresholds for clarity
+        for b in range(1, NUM_BUILDS + 1):
+            mult = self._decay_multiplier(b)
+            decay_pct = 10 + (b - 1) * 20
+            self.strategyLogger.info(f"Build {b}: enters at {decay_pct}% decay (multiplier {mult:.2f})")
 
         # Shared state
-        straddle_data = []
-        straddle_ema = []
-        current_ema = None
-        refrence_value_B1 = None
-        refrence_value_B2 = None
         StraddlePremium_Cr = None
         max_straddle_premium = 0
 
@@ -292,70 +321,35 @@ class algoLogic(optOverNightAlgoLogic):
 
             self.pnlCalculator()
 
-            # Expiry rollover
+            # ── Expiry rollover ──
             if self.humanTime.date() > expiryDatetime.date():
                 Currentexpiry = getExpiryData(self.timeData, baseSym)['CurrentExpiry']
                 expiryDatetime = datetime.strptime(Currentexpiry, "%d%b%y").replace(hour=15, minute=20)
                 expiryEpoch = expiryDatetime.timestamp()
-                Perc_B1 = 2
-                n_B1 = 4
-                EntryAllowed_B1 = False
-                First_Entry_B1 = True
-                Perc_B2 = 2
-                n_B2 = 4
-                EntryAllowed_B2 = False
-                First_Entry_B2 = True
-                straddle_data = []
-                straddle_ema = []
-                current_ema = None
-                refrence_value_B1 = None
-                refrence_value_B2 = None
+                # Reset ALL build states
+                Perc, n, EntryAllowed, First_Entry, refrence_value = self._init_build_state()
                 StraddlePremium_Cr = None
                 max_straddle_premium = 0
-                MaxLoss_Hit = False
 
+            # ── Filter positions per build ──
+            filtered = {}
+            for b in range(1, NUM_BUILDS + 1):
+                if not self.openPnl.empty:
+                    filtered[b] = self.openPnl[(self.openPnl['PositionStatus'] == -1) & (self.openPnl['Build'] == b)]
+                else:
+                    filtered[b] = pd.DataFrame()
 
-            if not self.openPnl.empty:
-                open_sum = int(self.openPnl['Pnl'].sum())
+            # ── 50% strangle decay -> relax n (per build) ──
+            for b in range(1, NUM_BUILDS + 1):
+                if not filtered[b].empty:
+                    cur = filtered[b]['CurrentPrice'].sum()
+                    ent = filtered[b]['EntryPrice'].sum()
+                    self.strategyLogger.info(f"B{b} Strangle curr={cur} entry={ent}")
+                    if cur <= ent * 0.5:
+                        n[b] = 2
+                        self.strategyLogger.info(f"B{b} strangle <=50%. n[{b}]={n[b]}")
 
-                self.closedPnl['ExitTime'] = pd.to_datetime(self.closedPnl['ExitTime'])
-                currentDayClosedPnl = self.closedPnl[self.closedPnl['ExitTime'].dt.date == self.humanTime.date()]
-                close_sum = int(currentDayClosedPnl['Pnl'].sum())
-
-                self.strategyLogger.info(f"{self.humanTime} pnl_sum:{open_sum + close_sum}")
-
-                if (open_sum + close_sum) < -5000:
-                    for index, row in self.openPnl.iterrows():
-                        self.exitOrder(index, "MaxLoss")
-
-                    MaxLoss_Hit = True
-
-            # Filter by build
-            filtered_B1 = pd.DataFrame()
-            filtered_B2 = pd.DataFrame()
-            if not self.openPnl.empty:
-                filtered_B1 = self.openPnl[(self.openPnl['PositionStatus'] == -1) & (self.openPnl['Build'] == 1)]
-                filtered_B2 = self.openPnl[(self.openPnl['PositionStatus'] == -1) & (self.openPnl['Build'] == 2)]
-
-            # B1: 50% strangle decay -> relax n
-            if not filtered_B1.empty:
-                cur_B1 = filtered_B1['CurrentPrice'].sum()
-                ent_B1 = filtered_B1['EntryPrice'].sum()
-                self.strategyLogger.info(f"B1 Strangle curr={cur_B1} entry={ent_B1}")
-                if cur_B1 <= ent_B1 * 0.5:
-                    n_B1 = 2
-                    self.strategyLogger.info(f"B1 strangle <=50%. n_B1={n_B1}")
-
-            # B2: 50% strangle decay -> relax n
-            if not filtered_B2.empty:
-                cur_B2 = filtered_B2['CurrentPrice'].sum()
-                ent_B2 = filtered_B2['EntryPrice'].sum()
-                self.strategyLogger.info(f"B2 Strangle curr={cur_B2} entry={ent_B2}")
-                if cur_B2 <= ent_B2 * 0.5:
-                    n_B2 = 2
-                    self.strategyLogger.info(f"B2 strangle <=50%. n_B2={n_B2}")
-
-            # Straddle Premium Calculation (shared)
+            # ── Straddle Premium Calculation (shared) ──
             if ((timeData - 60) in df.index) and self.humanTime.time() < time(15, 20) and self.humanTime.date() == expiryDatetime.date():
                 callSym = self.getCallSym(self.timeData, baseSym, df.at[lastIndexTimeData[1], "c"], expiry=Currentexpiry)
                 putSym = self.getPutSym(self.timeData, baseSym, df.at[lastIndexTimeData[1], "c"], expiry=Currentexpiry)
@@ -371,140 +365,92 @@ class algoLogic(optOverNightAlgoLogic):
                     self.strategyLogger.info(e)
                     self.strategyLogger.info(f"Error fetching straddle data at {self.humanTime}.")
 
-            # Time-based exit (all positions)
+            # ── Time-based exit (all positions) ──
             if not self.openPnl.empty:
                 for index, row in self.openPnl.iterrows():
                     if self.humanTime.time() >= time(15, 20):
                         self.exitOrder(index, "Time Up")
 
             # ====================================================
-            # BUILD 1: Leg adjustment (1:n ratio)
+            # LEG ADJUSTMENT LOOP — all builds
             # ====================================================
-            if not filtered_B1.empty and len(filtered_B1) == 2:
-                r1 = filtered_B1.iloc[0]
-                r2 = filtered_B1.iloc[1]
-                p1 = r1["CurrentPrice"]
-                p2 = r2["CurrentPrice"]
+            for b in range(1, NUM_BUILDS + 1):
+                if not filtered[b].empty and len(filtered[b]) == 2:
+                    r1 = filtered[b].iloc[0]
+                    r2 = filtered[b].iloc[1]
+                    p1 = r1["CurrentPrice"]
+                    p2 = r2["CurrentPrice"]
 
-                if p1 * n_B1 <= p2:
-                    self.strategyLogger.info(f"B1 ratio hit: {r1['Symbol']}({p1}) x{n_B1} <= {r2['Symbol']}({p2})")
-                    symSide = r1["Symbol"][-2:]
-                    n_B1 = 4
-                    Perc_B1, EntryAllowed_B1 = self._handle_leg_adjustment(
-                        r1, r2, p2, p1, symSide, 1,
-                        baseSym, df, lastIndexTimeData, Currentexpiry, lotSize, expiryEpoch,
-                        StraddlePremium_Cr, refrence_value_B1, Perc_B1, EntryAllowed_B1)
+                    if p1 * n[b] <= p2:
+                        self.strategyLogger.info(f"B{b} ratio hit: {r1['Symbol']}({p1}) x{n[b]} <= {r2['Symbol']}({p2})")
+                        symSide = r1["Symbol"][-2:]
+                        n[b] = 4
+                        Perc[b], EntryAllowed[b] = self._handle_leg_adjustment(
+                            r1, r2, p2, p1, symSide, b,
+                            baseSym, df, lastIndexTimeData, Currentexpiry, lotSize, expiryEpoch,
+                            StraddlePremium_Cr, refrence_value[b], Perc[b], EntryAllowed[b])
 
-                elif p2 * n_B1 <= p1:
-                    self.strategyLogger.info(f"B1 ratio hit: {r2['Symbol']}({p2}) x{n_B1} <= {r1['Symbol']}({p1})")
-                    symSide = r2["Symbol"][-2:]
-                    n_B1 = 4
-                    Perc_B1, EntryAllowed_B1 = self._handle_leg_adjustment(
-                        r2, r1, p1, p2, symSide, 1,
-                        baseSym, df, lastIndexTimeData, Currentexpiry, lotSize, expiryEpoch,
-                        StraddlePremium_Cr, refrence_value_B1, Perc_B1, EntryAllowed_B1)
-
-            # ====================================================
-            # BUILD 2: Leg adjustment (1:n ratio)
-            # ====================================================
-            if not filtered_B2.empty and len(filtered_B2) == 2:
-                r1 = filtered_B2.iloc[0]
-                r2 = filtered_B2.iloc[1]
-                p1 = r1["CurrentPrice"]
-                p2 = r2["CurrentPrice"]
-
-                if p1 * n_B2 <= p2:
-                    self.strategyLogger.info(f"B2 ratio hit: {r1['Symbol']}({p1}) x{n_B2} <= {r2['Symbol']}({p2})")
-                    symSide = r1["Symbol"][-2:]
-                    n_B2 = 4
-                    Perc_B2, EntryAllowed_B2 = self._handle_leg_adjustment(
-                        r1, r2, p2, p1, symSide, 2,
-                        baseSym, df, lastIndexTimeData, Currentexpiry, lotSize, expiryEpoch,
-                        StraddlePremium_Cr, refrence_value_B2, Perc_B2, EntryAllowed_B2)
-
-                elif p2 * n_B2 <= p1:
-                    self.strategyLogger.info(f"B2 ratio hit: {r2['Symbol']}({p2}) x{n_B2} <= {r1['Symbol']}({p1})")
-                    symSide = r2["Symbol"][-2:]
-                    n_B2 = 4
-                    Perc_B2, EntryAllowed_B2 = self._handle_leg_adjustment(
-                        r2, r1, p1, p2, symSide, 2,
-                        baseSym, df, lastIndexTimeData, Currentexpiry, lotSize, expiryEpoch,
-                        StraddlePremium_Cr, refrence_value_B2, Perc_B2, EntryAllowed_B2)
+                    elif p2 * n[b] <= p1:
+                        self.strategyLogger.info(f"B{b} ratio hit: {r2['Symbol']}({p2}) x{n[b]} <= {r1['Symbol']}({p1})")
+                        symSide = r2["Symbol"][-2:]
+                        n[b] = 4
+                        Perc[b], EntryAllowed[b] = self._handle_leg_adjustment(
+                            r2, r1, p1, p2, symSide, b,
+                            baseSym, df, lastIndexTimeData, Currentexpiry, lotSize, expiryEpoch,
+                            StraddlePremium_Cr, refrence_value[b], Perc[b], EntryAllowed[b])
 
             # ====================================================
-            # ENTRY SIGNALS
+            # ENTRY SIGNALS LOOP — all builds
             # ====================================================
-            if ((timeData - 60) in df.index) and MaxLoss_Hit== False:
+            if ((timeData - 60) in df.index):
 
-                b1_sell_empty = True
-                b2_sell_empty = True
-                if not self.openPnl.empty:
-                    b1_sell_empty = self.openPnl[(self.openPnl['PositionStatus'] == -1) & (self.openPnl['Build'] == 1)].empty
-                    b2_sell_empty = self.openPnl[(self.openPnl['PositionStatus'] == -1) & (self.openPnl['Build'] == 2)].empty
+                for b in range(1, NUM_BUILDS + 1):
+                    # Check if this build already has open sell positions
+                    b_sell_empty = True
+                    if not self.openPnl.empty:
+                        b_sell_empty = self.openPnl[(self.openPnl['PositionStatus'] == -1) & (self.openPnl['Build'] == b)].empty
 
-                # ── BUILD 1 ENTRIES ──
-                if b1_sell_empty and self.humanTime.date() == expiryDatetime.date() and self.humanTime.time() >= time(9, 20) and self.humanTime.time() < time(15, 20):
-                    otm_b1 = self.getOTMFactor(baseSym, Currentexpiry, lastIndexTimeData, Perc_B1, df)
+                    if b_sell_empty and self.humanTime.date() == expiryDatetime.date() and self.humanTime.time() >= time(9, 20) and self.humanTime.time() < time(15, 20):
+                        otm_b = self.getOTMFactor(baseSym, Currentexpiry, lastIndexTimeData, Perc[b], df)
 
-                    # B1: Re-entry after squareoff
-                    if StraddlePremium_Cr is not None and refrence_value_B1 is not None and StraddlePremium_Cr < refrence_value_B1 and otm_b1 is not None and EntryAllowed_B1 == True:
-                        data_CE, data_PE, callSym, putSym, success = self._do_strangle_entry(baseSym, df, lastIndexTimeData, Currentexpiry, otm_b1, lotSize, expiryEpoch, 1)
-                        if success:
-                            if data_CE < 1 or data_PE < 1:
-                                self.strategyLogger.info(f"B1 re-entry: premium <1 (CE:{data_CE}, PE:{data_PE}). Skip.")
-                                if Perc_B1 == 2:
-                                    Perc_B1 = 1
-                                elif Perc_B1 == 1:
-                                    EntryAllowed_B1 = False
-                                    self.strategyLogger.info(f"B1: EntryAllowed -> False")
-                                continue
-                            self.entryOrder(data_CE, callSym, lotSize, "SELL", {"Expiry": expiryEpoch, "Build": 1})
-                            self.entryOrder(data_PE, putSym, lotSize, "SELL", {"Expiry": expiryEpoch, "Build": 1})
-                            n_B1 = 4
+                        # Re-entry after squareoff
+                        if (StraddlePremium_Cr is not None
+                                and refrence_value[b] is not None
+                                and StraddlePremium_Cr < refrence_value[b]
+                                and otm_b is not None
+                                and EntryAllowed[b] == True):
+                            data_CE, data_PE, callSym, putSym, success = self._do_strangle_entry(
+                                baseSym, df, lastIndexTimeData, Currentexpiry, otm_b, lotSize, expiryEpoch, b)
+                            if success:
+                                if data_CE < 1 or data_PE < 1:
+                                    self.strategyLogger.info(f"B{b} re-entry: premium <1 (CE:{data_CE}, PE:{data_PE}). Skip.")
+                                    if Perc[b] == 2:
+                                        Perc[b] = 1
+                                    elif Perc[b] == 1:
+                                        EntryAllowed[b] = False
+                                        self.strategyLogger.info(f"B{b}: EntryAllowed -> False")
+                                    continue
+                                self.entryOrder(data_CE, callSym, lotSize, "SELL", {"Expiry": expiryEpoch, "Build": b})
+                                self.entryOrder(data_PE, putSym, lotSize, "SELL", {"Expiry": expiryEpoch, "Build": b})
+                                n[b] = 4
 
-                    # B1: First entry at 10% decay
-                    if StraddlePremium_Cr is not None and max_straddle_premium > 0 and StraddlePremium_Cr <= max_straddle_premium * 0.9 and otm_b1 is not None and First_Entry_B1 == True:
-                        data_CE, data_PE, callSym, putSym, success = self._do_strangle_entry(baseSym, df, lastIndexTimeData, Currentexpiry, otm_b1, lotSize, expiryEpoch, 1)
-                        if success:
-                            self.entryOrder(data_CE, callSym, lotSize, "SELL", {"Expiry": expiryEpoch, "Build": 1})
-                            self.entryOrder(data_PE, putSym, lotSize, "SELL", {"Expiry": expiryEpoch, "Build": 1})
-                            EntryAllowed_B1 = True
-                            First_Entry_B1 = False
-                            n_B1 = 4
-                            refrence_value_B1 = StraddlePremium_Cr
-                            self.strategyLogger.info(f"B1 reference value set: {refrence_value_B1}")
-
-                # ── BUILD 2 ENTRIES ──
-                if b2_sell_empty and self.humanTime.date() == expiryDatetime.date() and self.humanTime.time() >= time(9, 20) and self.humanTime.time() < time(15, 20):
-                    otm_b2 = self.getOTMFactor(baseSym, Currentexpiry, lastIndexTimeData, Perc_B2, df)
-
-                    # B2: Re-entry after squareoff
-                    if StraddlePremium_Cr is not None and refrence_value_B2 is not None and StraddlePremium_Cr < refrence_value_B2 and otm_b2 is not None and EntryAllowed_B2 == True:
-                        data_CE, data_PE, callSym, putSym, success = self._do_strangle_entry(baseSym, df, lastIndexTimeData, Currentexpiry, otm_b2, lotSize, expiryEpoch, 2)
-                        if success:
-                            if data_CE < 1 or data_PE < 1:
-                                self.strategyLogger.info(f"B2 re-entry: premium <1 (CE:{data_CE}, PE:{data_PE}). Skip.")
-                                if Perc_B2 == 2:
-                                    Perc_B2 = 1
-                                elif Perc_B2 == 1:
-                                    EntryAllowed_B2 = False
-                                    self.strategyLogger.info(f"B2: EntryAllowed -> False")
-                                continue
-                            self.entryOrder(data_CE, callSym, lotSize, "SELL", {"Expiry": expiryEpoch, "Build": 2})
-                            self.entryOrder(data_PE, putSym, lotSize, "SELL", {"Expiry": expiryEpoch, "Build": 2})
-                            n_B2 = 4
-
-                    # B2: First entry at 30% decay
-                    if StraddlePremium_Cr is not None and max_straddle_premium > 0 and StraddlePremium_Cr <= max_straddle_premium * 0.7 and otm_b2 is not None and First_Entry_B2 == True:
-                        data_CE, data_PE, callSym, putSym, success = self._do_strangle_entry(baseSym, df, lastIndexTimeData, Currentexpiry, otm_b2, lotSize, expiryEpoch, 2)
-                        if success:
-                            self.entryOrder(data_CE, callSym, lotSize, "SELL", {"Expiry": expiryEpoch, "Build": 2})
-                            self.entryOrder(data_PE, putSym, lotSize, "SELL", {"Expiry": expiryEpoch, "Build": 2})
-                            EntryAllowed_B2 = True
-                            First_Entry_B2 = False
-                            n_B2 = 4
-                            refrence_value_B2 = StraddlePremium_Cr
-                            self.strategyLogger.info(f"B2 reference value set: {refrence_value_B2}")
+                        # First entry at the build's decay threshold
+                        decay_mult = self._decay_multiplier(b)
+                        if (StraddlePremium_Cr is not None
+                                and max_straddle_premium > 0
+                                and StraddlePremium_Cr <= max_straddle_premium * decay_mult
+                                and otm_b is not None
+                                and First_Entry[b] == True):
+                            data_CE, data_PE, callSym, putSym, success = self._do_strangle_entry(
+                                baseSym, df, lastIndexTimeData, Currentexpiry, otm_b, lotSize, expiryEpoch, b)
+                            if success:
+                                self.entryOrder(data_CE, callSym, lotSize, "SELL", {"Expiry": expiryEpoch, "Build": b})
+                                self.entryOrder(data_PE, putSym, lotSize, "SELL", {"Expiry": expiryEpoch, "Build": b})
+                                EntryAllowed[b] = True
+                                First_Entry[b] = False
+                                n[b] = 4
+                                refrence_value[b] = StraddlePremium_Cr
+                                self.strategyLogger.info(f"B{b} reference value set: {refrence_value[b]}")
 
         self.pnlCalculator()
         self.combinePnlCsv()
@@ -516,11 +462,11 @@ if __name__ == "__main__":
     devName = "NA"
     strategyName = "rdx"
     version = "v1"
-    startDate = datetime(2023, 1, 1, 9, 15)
+    startDate = datetime(2024, 1, 1, 9, 15)
     endDate = datetime(2026, 12, 31, 15, 30)
     algo = algoLogic(devName, strategyName, version)
-    baseSym = "NIFTY"
-    indexName = "NIFTY 50"
+    baseSym = "SENSEX"
+    indexName = "SENSEX"
     closedPnl, fileDir = algo.run(startDate, endDate, baseSym, indexName)
     print("Calculating Daily Pnl")
     endTime = datetime.now()

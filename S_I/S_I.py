@@ -300,69 +300,19 @@ class algoLogic(optOverNightAlgoLogic):
                         exitType = "Time Up"
                         self.exitOrder(index, exitType)
 
-                    elif symSide == 'CE':
-                        if CE_Target == False and row["CurrentPrice"] <= row["EntryPrice"]*0.5:
-                            self.openPnl.at[index, "stoploss"] = row["EntryPrice"]
-                            self.strategyLogger.info(f"{self.humanTime} stoploss shifted to breakeven: {self.openPnl.at[index, 'stoploss']}")
-                            self.strategyLogger.info(f"{self.openPnl[['Symbol', 'Target', 'stoploss']].to_string()}")
+                    elif row["CurrentPrice"] >= row["stoploss"]:
+                        exitType = "PE_Stoploss Hit"
+                        self.exitOrder(index, exitType)
 
-                        if row["CurrentPrice"] <= row["Target"]:
-                            self.openPnl.at[index, "stoploss"] = (df_CE.loc[:lastIndexTimeData[1]-60, 'c'].min())*2
-                            self.openPnl.at[index, "Target"] = row["CurrentPrice"]
-                            self.strategyLogger.info(f"{self.humanTime} TARGET HIT CE and stoploss shifted to: {self.openPnl.at[index, 'stoploss']}")
-                            self.strategyLogger.info(f"Target: {self.openPnl.at[index, 'Target']}")
-                            self.strategyLogger.info(f"{self.openPnl[['Symbol', 'Target', 'stoploss']].to_string()}")
-                            CE_Target = True
-
-
-                        elif row["CurrentPrice"] >= row["stoploss"]:
-                            exitType = "CE_Stoploss Hit"
-                            self.exitOrder(index, exitType)
-
-                        elif (lastIndexTimeData[1] in df_CE.index):
-                            if df_CE.at[lastIndexTimeData[1], "HRSO"] > CE_High:
-                                exitType = "CE_high_Break"
-                                self.exitOrder(index, exitType)
-
-                        
-                    elif symSide == 'PE':
-                        if PE_Target == False and row["CurrentPrice"] <= row["EntryPrice"]*0.5:
-                            self.openPnl.at[index, "stoploss"] = row["EntryPrice"]
-                            self.strategyLogger.info(f"{self.humanTime} stoploss shifted to breakeven: {self.openPnl.at[index, 'stoploss']}")
-                            self.strategyLogger.info(f"{self.openPnl[['Symbol', 'Target', 'stoploss']].to_string()}")
-
-                        if row["CurrentPrice"] <= row["Target"]:
-                            self.openPnl.at[index, "stoploss"] = (df_PE.loc[:lastIndexTimeData[1]-60, 'c'].min())*2
-                            self.openPnl.at[index, "Target"] = row["CurrentPrice"]
-                            self.strategyLogger.info(f"{self.humanTime} TARGET HIT PE and stoploss shifted to: {self.openPnl.at[index, 'stoploss']}")
-                            self.strategyLogger.info(f"Target: {self.openPnl.at[index, 'Target']}")
-                            self.strategyLogger.info(f"{self.openPnl[['Symbol', 'Target', 'stoploss']].to_string()}")
-                            PE_Target = True
-                            
-
-                        elif row["CurrentPrice"] >= row["stoploss"]:
-                            exitType = "PE_Stoploss Hit"
-                            self.exitOrder(index, exitType)
-
-
-                        elif (lastIndexTimeData[1] in df_PE.index):
-                            if df_PE.at[lastIndexTimeData[1], "HRSO"] > PE_High:
-                                exitType = "PE_high_Break"
-                                self.exitOrder(index, exitType)
+                    elif row["CurrentPrice"] <= row["Target"]:
+                        exitType = "PE_Target Hit"
+                        self.exitOrder(index, exitType)
 
 
 
             tradecount = self.openPnl['Symbol'].str[-2:].value_counts()
             callCounter= tradecount.get('CE',0)
             putCounter= tradecount.get('PE',0)
-
-            # if self.humanTime.time() > time(15, 20):
-            #     if CE_Target == False:
-            #         CE_Ls=1
-
-            #     if PE_Target == False:
-            #         PE_Ls=1
-                    
                     
 
 
@@ -408,7 +358,7 @@ if __name__ == "__main__":
     version = "v1"
 
     # Define Start date and End date
-    startDate = datetime(2023, 1, 1, 9, 15)
+    startDate = datetime(2025, 1, 1, 9, 15)
     endDate = datetime(2025, 12, 31, 15, 30)
 
     # Create algoLogic object

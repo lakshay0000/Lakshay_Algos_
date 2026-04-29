@@ -188,7 +188,7 @@ def calculate_mtm1(closedPnl, saveFileDir, timeFrame="15T", mtm=False, equityMar
 
 
 
-df = pd.read_csv(r'/root/Lakshay_Algos/Kubera/Json/1Day_mtm.csv')
+df = pd.read_csv(r'/root/Lakshay_Algos/Kubera/Json/DYS_SS_10_30_50.csv')
 saveFileDir = r'/root/Lakshay_Algos/Kubera/Json'  
 
 

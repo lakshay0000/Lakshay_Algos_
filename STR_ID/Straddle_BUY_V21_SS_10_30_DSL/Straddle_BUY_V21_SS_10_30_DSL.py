@@ -324,7 +324,7 @@ class algoLogic(optOverNightAlgoLogic):
 
                 self.strategyLogger.info(f"{self.humanTime} pnl_sum:{open_sum + close_sum}")
 
-                if (open_sum + close_sum) < -2000:
+                if (open_sum + close_sum) < -5000:
                     for index, row in self.openPnl.iterrows():
                         self.exitOrder(index, "MaxLoss")
 
