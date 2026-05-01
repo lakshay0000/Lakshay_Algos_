@@ -191,7 +191,7 @@ class algoLogic(optOverNightAlgoLogic):
         putentryallowed = False
         callentryallowed = False
         Perc = 2
-        n = 2
+        n = 3
         straddle_data = []  # List of dicts with timestamp and premium
         straddle_ema = []   # List of EMA values
         current_ema = None
@@ -255,7 +255,7 @@ class algoLogic(optOverNightAlgoLogic):
                 expiryDatetime = datetime.strptime(Currentexpiry, "%d%b%y").replace(hour=15, minute=20)
                 expiryEpoch= expiryDatetime.timestamp()
                 Perc = 2
-                n = 2
+                n = 3
                 straddle_data = []  # List of dicts with timestamp and premium
                 straddle_ema = []   # List of EMA values
                 current_ema = None
@@ -361,86 +361,101 @@ class algoLogic(optOverNightAlgoLogic):
                             symSide = symSide[len(symSide) - 2:]
                             otm = self.getOTMFactor(baseSym, Currentexpiry, lastIndexTimeData, Perc, df)
 
-                            if exit_small_mode:
-                                # Continue exiting the smaller position (row1)
-                                self.strategyLogger.info(f"exit_small_mode active: exiting smaller {row1['Symbol']}.")     
-                                self.exitOrder(row1_index, "Half_Exit")
-                                if symSide == "CE":
-                                    callSymRef = self.getCallSym(self.timeData, baseSym, df.at[lastIndexTimeData[1], "c"], expiry=Currentexpiry, otmFactor=1)
-                                    otmstk = re.search(r'(\d+)(?=CE)', callSymRef).group(1)
-                                    callSym, Data_CE = self.OptChain(lastIndexTimeData[1], "CE", df.at[lastIndexTimeData[1], "c"], baseSym, doubled_price, otm=15)
-                                    stk = re.search(r'(\d+)(?=CE)', callSym).group(1)
-                                    if Data_CE < 1 or stk <= otmstk:
-                                        self.squareoff()
-                                    else:
-                                        self.entryOrder(Data_CE, callSym, lotSize, "SELL", {"Expiry": expiryEpoch},)  
-                                elif symSide == "PE":
-                                    putSymRef = self.getPutSym(self.timeData, baseSym, df.at[lastIndexTimeData[1], "c"], expiry=Currentexpiry, otmFactor=1)
-                                    otmstk = re.search(r'(\d+)(?=PE)', putSymRef).group(1)
-                                    putSym, Data_PE = self.OptChain(lastIndexTimeData[1], "PE", df.at[lastIndexTimeData[1], "c"], baseSym, doubled_price, otm=15)
-                                    stk = re.search(r'(\d+)(?=PE)', putSym).group(1)
-                                    if Data_PE < 1 or stk >= otmstk:
-                                        self.squareoff()
-                                    else:
-                                        self.entryOrder(Data_PE, putSym, lotSize, "SELL", {"Expiry": expiryEpoch},)
+                            if otm is not None:
 
-                            else:
-                                # Primary: exit bigger (row2), enter at Half_price on the bigger's side
-                                # symSide is the smaller's (row1) side; bigger's side is opposite
-                                if symSide == "CE":
-                                    # smaller=CE, bigger=PE → primary: exit PE (row2), enter PE at Half_price
-                                    putSym = self.getPutSym(
-                                        self.timeData, baseSym, df.at[lastIndexTimeData[1], "c"], expiry=Currentexpiry, otmFactor=otm)
-                                    otmstk = re.search(r'(\d+)(?=PE)', putSym).group(1)
-
-                                    putSym, Data_PE = self.OptChain(lastIndexTimeData[1], "PE", df.at[lastIndexTimeData[1], "c"], baseSym, Half_price, otm=15)
-                                    stk = re.search(r'(\d+)(?=PE)', putSym).group(1)
-
-                                    if stk >= otmstk and Data_PE >= 1:
-                                        # New PE is further OTM than 1st OTM → proceed with primary
-                                        self.strategyLogger.info(f"Exiting bigger PE {row2['Symbol']}, entering PE at Half_price {Half_price}.")
-                                        self.exitOrder(row2_index, "Half_Exit")
-                                        self.entryOrder(Data_PE, putSym, lotSize, "SELL", {"Expiry": expiryEpoch},)
-                                    else:
-                                        # New PE is at 1st OTM/ATM or premium < 1 → fallback: exit smaller CE
-                                        self.strategyLogger.info(f"PE at Half_price is at 1st OTM/ATM or premium<1. Fallback: exiting smaller CE {row1['Symbol']}.")
-                                        self.exitOrder(row1_index, "Half_Exit")
+                                if exit_small_mode:
+                                    # Continue exiting the smaller position (row1)
+                                    self.strategyLogger.info(f"exit_small_mode active: exiting smaller {row1['Symbol']}.")     
+                                    self.exitOrder(row1_index, "Half_Exit")
+                                    if symSide == "CE":
+                                        callSymRef = self.getCallSym(self.timeData, baseSym, df.at[lastIndexTimeData[1], "c"], expiry=Currentexpiry, otmFactor=0)
+                                        otmstk = re.search(r'(\d+)(?=CE)', callSymRef).group(1)
                                         callSym, Data_CE = self.OptChain(lastIndexTimeData[1], "CE", df.at[lastIndexTimeData[1], "c"], baseSym, doubled_price, otm=15)
+                                        stk = re.search(r'(\d+)(?=CE)', callSym).group(1)
+
+                                        if stk <= otmstk:
+                                            exit_small_mode = False
+                                            self.strategyLogger.info(f"New CE is at 1st OTM/ATM. Setting exit_small_mode to False")
+                                            n = 3
+
                                         if Data_CE < 1:
                                             self.squareoff()
                                         else:
-                                            self.entryOrder(Data_CE, callSym, lotSize, "SELL", {"Expiry": expiryEpoch},)
-                                        exit_small_mode = True
-                                        n = 4
-                                        self.strategyLogger.info(f"Setting exit_small_mode to True.")
+                                            self.entryOrder(Data_CE, callSym, lotSize, "SELL", {"Expiry": expiryEpoch},)  
 
-                                elif symSide == "PE":
-                                    # smaller=PE, bigger=CE → primary: exit CE (row2), enter CE at Half_price
-                                    callSym = self.getCallSym(
-                                        self.timeData, baseSym, df.at[lastIndexTimeData[1], "c"], expiry=Currentexpiry, otmFactor=otm)
-                                    otmstk = re.search(r'(\d+)(?=CE)', callSym).group(1)
-
-                                    callSym, Data_CE = self.OptChain(lastIndexTimeData[1], "CE", df.at[lastIndexTimeData[1], "c"], baseSym, Half_price, otm=15)
-                                    stk = re.search(r'(\d+)(?=CE)', callSym).group(1)
-
-                                    if stk <= otmstk and Data_CE >= 1:
-                                        # New CE is further OTM than 1st OTM → proceed with primary
-                                        self.strategyLogger.info(f"Exiting bigger CE {row2['Symbol']}, entering CE at Half_price {Half_price}.")
-                                        self.exitOrder(row2_index, "Half_Exit")
-                                        self.entryOrder(Data_CE, callSym, lotSize, "SELL", {"Expiry": expiryEpoch},)
-                                    else:
-                                        # New CE is at 1st OTM/ATM or premium < 1 → fallback: exit smaller PE
-                                        self.strategyLogger.info(f"CE at Half_price is at 1st OTM/ATM or premium<1. Fallback: exiting smaller PE {row1['Symbol']}.")
-                                        self.exitOrder(row1_index, "Half_Exit")
-                                        self.strategyLogger.info(f"Attempting to enter CE at doubled price {doubled_price}.")
+                                    elif symSide == "PE":
+                                        putSymRef = self.getPutSym(self.timeData, baseSym, df.at[lastIndexTimeData[1], "c"], expiry=Currentexpiry, otmFactor=0)
+                                        otmstk = re.search(r'(\d+)(?=PE)', putSymRef).group(1)
                                         putSym, Data_PE = self.OptChain(lastIndexTimeData[1], "PE", df.at[lastIndexTimeData[1], "c"], baseSym, doubled_price, otm=15)
+                                        stk = re.search(r'(\d+)(?=PE)', putSym).group(1)
+
+                                        if stk >= otmstk:
+                                            exit_small_mode = False
+                                            self.strategyLogger.info(f"New PE is at 1st OTM/ATM. Setting exit_small_mode to False")
+                                            n = 3
+
                                         if Data_PE < 1:
                                             self.squareoff()
                                         else:
                                             self.entryOrder(Data_PE, putSym, lotSize, "SELL", {"Expiry": expiryEpoch},)
-                                        exit_small_mode = True
-                                        n=4
-                                        self.strategyLogger.info(f"Setting exit_small_mode to True.")
+
+                                else:
+                                    # Primary: exit bigger (row2), enter at Half_price on the bigger's side
+                                    # symSide is the smaller's (row1) side; bigger's side is opposite
+                                    if symSide == "CE":
+                                        # smaller=CE, bigger=PE → primary: exit PE (row2), enter PE at Half_price
+                                        putSym = self.getPutSym(
+                                            self.timeData, baseSym, df.at[lastIndexTimeData[1], "c"], expiry=Currentexpiry, otmFactor=otm)
+                                        otmstk = re.search(r'(\d+)(?=PE)', putSym).group(1)
+
+                                        putSym, Data_PE = self.OptChain(lastIndexTimeData[1], "PE", df.at[lastIndexTimeData[1], "c"], baseSym, Half_price, otm=15)
+                                        stk = re.search(r'(\d+)(?=PE)', putSym).group(1)
+
+                                        if stk >= otmstk and Data_PE >= 1:
+                                            # New PE is further OTM than 1st OTM → proceed with primary
+                                            self.strategyLogger.info(f"Exiting bigger PE {row2['Symbol']}, entering PE at Half_price {Half_price}.")
+                                            self.exitOrder(row2_index, "Half_Exit")
+                                            self.entryOrder(Data_PE, putSym, lotSize, "SELL", {"Expiry": expiryEpoch},)
+                                        else:
+                                            # New PE is at 1st OTM/ATM or premium < 1 → fallback: exit smaller CE
+                                            self.strategyLogger.info(f"PE at Half_price is at 1st OTM/ATM or premium<1. Fallback: exiting smaller CE {row1['Symbol']}.")
+                                            self.exitOrder(row1_index, "Half_Exit")
+                                            callSym, Data_CE = self.OptChain(lastIndexTimeData[1], "CE", df.at[lastIndexTimeData[1], "c"], baseSym, doubled_price, otm=15)
+                                            if Data_CE < 1:
+                                                self.squareoff()
+                                            else:
+                                                self.entryOrder(Data_CE, callSym, lotSize, "SELL", {"Expiry": expiryEpoch},)
+                                            exit_small_mode = True
+                                            n = 4
+                                            self.strategyLogger.info(f"Setting exit_small_mode to True.")
+
+                                    elif symSide == "PE":
+                                        # smaller=PE, bigger=CE → primary: exit CE (row2), enter CE at Half_price
+                                        callSym = self.getCallSym(
+                                            self.timeData, baseSym, df.at[lastIndexTimeData[1], "c"], expiry=Currentexpiry, otmFactor=otm)
+                                        otmstk = re.search(r'(\d+)(?=CE)', callSym).group(1)
+
+                                        callSym, Data_CE = self.OptChain(lastIndexTimeData[1], "CE", df.at[lastIndexTimeData[1], "c"], baseSym, Half_price, otm=15)
+                                        stk = re.search(r'(\d+)(?=CE)', callSym).group(1)
+
+                                        if stk <= otmstk and Data_CE >= 1:
+                                            # New CE is further OTM than 1st OTM → proceed with primary
+                                            self.strategyLogger.info(f"Exiting bigger CE {row2['Symbol']}, entering CE at Half_price {Half_price}.")
+                                            self.exitOrder(row2_index, "Half_Exit")
+                                            self.entryOrder(Data_CE, callSym, lotSize, "SELL", {"Expiry": expiryEpoch},)
+                                        else:
+                                            # New CE is at 1st OTM/ATM or premium < 1 → fallback: exit smaller PE
+                                            self.strategyLogger.info(f"CE at Half_price is at 1st OTM/ATM or premium<1. Fallback: exiting smaller PE {row1['Symbol']}.")
+                                            self.exitOrder(row1_index, "Half_Exit")
+                                            self.strategyLogger.info(f"Attempting to enter CE at doubled price {doubled_price}.")
+                                            putSym, Data_PE = self.OptChain(lastIndexTimeData[1], "PE", df.at[lastIndexTimeData[1], "c"], baseSym, doubled_price, otm=15)
+                                            if Data_PE < 1:
+                                                self.squareoff()
+                                            else:
+                                                self.entryOrder(Data_PE, putSym, lotSize, "SELL", {"Expiry": expiryEpoch},)
+                                            exit_small_mode = True
+                                            n=4
+                                            self.strategyLogger.info(f"Setting exit_small_mode to True.")
 
                         # row2 is smaller (price2), row1 is bigger (price1)
                         elif price2 * n <= price1:
@@ -451,82 +466,97 @@ class algoLogic(optOverNightAlgoLogic):
                             symSide = symSide[len(symSide) - 2:]
                             otm = self.getOTMFactor(baseSym, Currentexpiry, lastIndexTimeData, Perc, df)
 
-                            if exit_small_mode:
-                                # Continue exiting the smaller position (row2)
-                                self.strategyLogger.info(f"exit_small_mode active: exiting smaller {row2['Symbol']}.")
-                                self.exitOrder(row2_index, "Half_Exit")
-                                if symSide == "CE":
-                                    callSymRef = self.getCallSym(self.timeData, baseSym, df.at[lastIndexTimeData[1], "c"], expiry=Currentexpiry, otmFactor=1)
-                                    otmstk = re.search(r'(\d+)(?=CE)', callSymRef).group(1)
-                                    callSym, Data_CE = self.OptChain(lastIndexTimeData[1], "CE", df.at[lastIndexTimeData[1], "c"], baseSym, doubled_price, otm=15)
-                                    stk = re.search(r'(\d+)(?=CE)', callSym).group(1)
-                                    if Data_CE < 1 or stk <= otmstk:
-                                        self.squareoff()
-                                    else:
-                                        self.entryOrder(Data_CE, callSym, lotSize, "SELL", {"Expiry": expiryEpoch},)
-                                elif symSide == "PE":
-                                    putSymRef = self.getPutSym(self.timeData, baseSym, df.at[lastIndexTimeData[1], "c"], expiry=Currentexpiry, otmFactor=1)
-                                    otmstk = re.search(r'(\d+)(?=PE)', putSymRef).group(1)
-                                    putSym, Data_PE = self.OptChain(lastIndexTimeData[1], "PE", df.at[lastIndexTimeData[1], "c"], baseSym, doubled_price, otm=15)
-                                    stk = re.search(r'(\d+)(?=PE)', putSym).group(1)
-                                    if Data_PE < 1 or stk >= otmstk:
-                                        self.squareoff()
-                                    else:
-                                        self.entryOrder(Data_PE, putSym, lotSize, "SELL", {"Expiry": expiryEpoch},)
+                            if otm is not None:
 
-                            else:
-                                # Primary: exit bigger (row1), enter at Half_price on the bigger's side
-                                if symSide == "CE":
-                                    # smaller=CE, bigger=PE → primary: exit PE (row1), enter PE at Half_price
-                                    putSym = self.getPutSym(
-                                        self.timeData, baseSym, df.at[lastIndexTimeData[1], "c"], expiry=Currentexpiry, otmFactor=otm)
-                                    otmstk = re.search(r'(\d+)(?=PE)', putSym).group(1)
-
-                                    putSym, Data_PE = self.OptChain(lastIndexTimeData[1], "PE", df.at[lastIndexTimeData[1], "c"], baseSym, Half_price, otm=15)
-                                    stk = re.search(r'(\d+)(?=PE)', putSym).group(1)
-
-                                    if stk >= otmstk and Data_PE >= 1:
-                                        self.strategyLogger.info(f"Exiting bigger PE {row1['Symbol']}, entering PE at Half_price {Half_price}.")
-                                        self.exitOrder(row1_index, "Half_Exit")
-                                        self.entryOrder(Data_PE, putSym, lotSize, "SELL", {"Expiry": expiryEpoch},)
-                                    else:
-                                        self.strategyLogger.info(f"PE at Half_price is at 1st OTM/ATM or premium<1. Fallback: exiting smaller CE {row2['Symbol']}.")
-                                        self.exitOrder(row2_index, "Half_Exit")
+                                if exit_small_mode:
+                                    # Continue exiting the smaller position (row2)
+                                    self.strategyLogger.info(f"exit_small_mode active: exiting smaller {row2['Symbol']}.")
+                                    self.exitOrder(row2_index, "Half_Exit")
+                                    if symSide == "CE":
+                                        callSymRef = self.getCallSym(self.timeData, baseSym, df.at[lastIndexTimeData[1], "c"], expiry=Currentexpiry, otmFactor=1)
+                                        otmstk = re.search(r'(\d+)(?=CE)', callSymRef).group(1)
                                         callSym, Data_CE = self.OptChain(lastIndexTimeData[1], "CE", df.at[lastIndexTimeData[1], "c"], baseSym, doubled_price, otm=15)
+                                        stk = re.search(r'(\d+)(?=CE)', callSym).group(1)
+
+                                        if stk >= otmstk:
+                                            exit_small_mode = False
+                                            self.strategyLogger.info(f"New CE is at 1st OTM/ATM. Setting exit_small_mode to False")
+                                            n = 3
+
                                         if Data_CE < 1:
                                             self.squareoff()
                                         else:
                                             self.entryOrder(Data_CE, callSym, lotSize, "SELL", {"Expiry": expiryEpoch},)
-                                        exit_small_mode = True
-                                        n = 4
-                                        self.strategyLogger.info(f"Setting exit_small_mode to True.")
-
-                                elif symSide == "PE":
-                                    # smaller=PE, bigger=CE → primary: exit CE (row1), enter CE at Half_price
-                                    callSym = self.getCallSym(
-                                        self.timeData, baseSym, df.at[lastIndexTimeData[1], "c"], expiry=Currentexpiry, otmFactor=otm)
-                                    otmstk = re.search(r'(\d+)(?=CE)', callSym).group(1)
-
-                                    callSym, Data_CE = self.OptChain(lastIndexTimeData[1], "CE", df.at[lastIndexTimeData[1], "c"], baseSym, Half_price, otm=15)
-                                    stk = re.search(r'(\d+)(?=CE)', callSym).group(1)
-
-                                    if stk <= otmstk and Data_CE >= 1:
-                                        self.strategyLogger.info(f"Exiting bigger CE {row1['Symbol']}, entering CE at Half_price {Half_price}.")
-                                        self.exitOrder(row1_index, "Half_Exit")
-                                        self.entryOrder(Data_CE, callSym, lotSize, "SELL", {"Expiry": expiryEpoch},)
-                                    else:
-                                        self.strategyLogger.info(f"CE at Half_price is at 1st OTM/ATM or premium<1. Fallback: exiting smaller PE {row2['Symbol']}.")
-                                        self.exitOrder(row2_index, "Half_Exit")
-                                        self.strategyLogger.info(f"Attempting to enter CE at doubled price {doubled_price}.")
+                                            
+                                    elif symSide == "PE":
+                                        putSymRef = self.getPutSym(self.timeData, baseSym, df.at[lastIndexTimeData[1], "c"], expiry=Currentexpiry, otmFactor=1)
+                                        otmstk = re.search(r'(\d+)(?=PE)', putSymRef).group(1)
                                         putSym, Data_PE = self.OptChain(lastIndexTimeData[1], "PE", df.at[lastIndexTimeData[1], "c"], baseSym, doubled_price, otm=15)
+                                        stk = re.search(r'(\d+)(?=PE)', putSym).group(1)
+
+                                        if stk <= otmstk:
+                                            exit_small_mode = False
+                                            self.strategyLogger.info(f"New PE is at 1st OTM/ATM. Setting exit_small_mode to False")
+                                            n = 3
+                                            
                                         if Data_PE < 1:
                                             self.squareoff()
                                         else:
                                             self.entryOrder(Data_PE, putSym, lotSize, "SELL", {"Expiry": expiryEpoch},)
-                                            
-                                        exit_small_mode = True        
-                                        n = 4  
-                                        self.strategyLogger.info(f"Setting exit_small_mode to True.")
+
+                                else:
+                                    # Primary: exit bigger (row1), enter at Half_price on the bigger's side
+                                    if symSide == "CE":
+                                        # smaller=CE, bigger=PE → primary: exit PE (row1), enter PE at Half_price
+                                        putSym = self.getPutSym(
+                                            self.timeData, baseSym, df.at[lastIndexTimeData[1], "c"], expiry=Currentexpiry, otmFactor=otm)
+                                        otmstk = re.search(r'(\d+)(?=PE)', putSym).group(1)
+
+                                        putSym, Data_PE = self.OptChain(lastIndexTimeData[1], "PE", df.at[lastIndexTimeData[1], "c"], baseSym, Half_price, otm=15)
+                                        stk = re.search(r'(\d+)(?=PE)', putSym).group(1)
+
+                                        if stk >= otmstk and Data_PE >= 1:
+                                            self.strategyLogger.info(f"Exiting bigger PE {row1['Symbol']}, entering PE at Half_price {Half_price}.")
+                                            self.exitOrder(row1_index, "Half_Exit")
+                                            self.entryOrder(Data_PE, putSym, lotSize, "SELL", {"Expiry": expiryEpoch},)
+                                        else:
+                                            self.strategyLogger.info(f"PE at Half_price is at 1st OTM/ATM or premium<1. Fallback: exiting smaller CE {row2['Symbol']}.")
+                                            self.exitOrder(row2_index, "Half_Exit")
+                                            callSym, Data_CE = self.OptChain(lastIndexTimeData[1], "CE", df.at[lastIndexTimeData[1], "c"], baseSym, doubled_price, otm=15)
+                                            if Data_CE < 1:
+                                                self.squareoff()
+                                            else:
+                                                self.entryOrder(Data_CE, callSym, lotSize, "SELL", {"Expiry": expiryEpoch},)
+                                            exit_small_mode = True
+                                            n = 4
+                                            self.strategyLogger.info(f"Setting exit_small_mode to True.")
+
+                                    elif symSide == "PE":
+                                        # smaller=PE, bigger=CE → primary: exit CE (row1), enter CE at Half_price
+                                        callSym = self.getCallSym(
+                                            self.timeData, baseSym, df.at[lastIndexTimeData[1], "c"], expiry=Currentexpiry, otmFactor=otm)
+                                        otmstk = re.search(r'(\d+)(?=CE)', callSym).group(1)
+
+                                        callSym, Data_CE = self.OptChain(lastIndexTimeData[1], "CE", df.at[lastIndexTimeData[1], "c"], baseSym, Half_price, otm=15)
+                                        stk = re.search(r'(\d+)(?=CE)', callSym).group(1)
+
+                                        if stk <= otmstk and Data_CE >= 1:
+                                            self.strategyLogger.info(f"Exiting bigger CE {row1['Symbol']}, entering CE at Half_price {Half_price}.")
+                                            self.exitOrder(row1_index, "Half_Exit")
+                                            self.entryOrder(Data_CE, callSym, lotSize, "SELL", {"Expiry": expiryEpoch},)
+                                        else:
+                                            self.strategyLogger.info(f"CE at Half_price is at 1st OTM/ATM or premium<1. Fallback: exiting smaller PE {row2['Symbol']}.")
+                                            self.exitOrder(row2_index, "Half_Exit")
+                                            self.strategyLogger.info(f"Attempting to enter CE at doubled price {doubled_price}.")
+                                            putSym, Data_PE = self.OptChain(lastIndexTimeData[1], "PE", df.at[lastIndexTimeData[1], "c"], baseSym, doubled_price, otm=15)
+                                            if Data_PE < 1:
+                                                self.squareoff()
+                                            else:
+                                                self.entryOrder(Data_PE, putSym, lotSize, "SELL", {"Expiry": expiryEpoch},)
+                                                
+                                            exit_small_mode = True        
+                                            n = 4  
+                                            self.strategyLogger.info(f"Setting exit_small_mode to True.")
 
 
             BuyPositionCounter= self.openPnl['PositionStatus'].value_counts().get(1,0)
@@ -588,7 +618,7 @@ if __name__ == "__main__":
     version = "v1"
 
     # Define Start date and End date
-    startDate = datetime(2026, 1, 1, 9, 15)
+    startDate = datetime(2024, 1, 1, 9, 15)
     endDate = datetime(2026, 12, 31, 15, 30)
 
     # Create algoLogic object
