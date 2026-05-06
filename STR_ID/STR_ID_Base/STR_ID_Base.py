@@ -210,7 +210,7 @@ class algoLogic(optOverNightAlgoLogic):
             #     StraddleEntryAllowed = False
 
             callCounter= self.openPnl['Symbol'].str[-2:].value_counts().get('CE',0)
-            putCounter= self.openPnl['Symbol'].str[-2:].value_counts().get('PE',0)
+            putCounter= self.openPnl['Symbol'].str[-2:].value_counts().get('PE',0) 
 
             
 
