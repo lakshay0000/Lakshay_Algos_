@@ -337,7 +337,7 @@ class algoLogic(optOverNightAlgoLogic):
 
 
             if not self.openPnl.empty:
-                if not filtered.empty:
+                if not filtered.empty and StraddlePremium_Cr is not None:
                     if len(filtered) == 2:
                         row1 = filtered.iloc[0]
                         row2 = filtered.iloc[1]
@@ -356,7 +356,7 @@ class algoLogic(optOverNightAlgoLogic):
                             self.strategyLogger.info(f"Strangle reference value set to {strangle_ref_value:.2f}.")
 
                         # Trigger on 30% decay/gain
-                        if strangle_ref_value >= StraddlePremium_Cr * 0.3:
+                        if strangle_ref_value >= StraddlePremium_Cr * 0.1:
                             threshold = 0.30
                             gain_threshold = 0.10
                             decay_triggered = current_strangle <= strangle_ref_value * (1 - threshold)
@@ -473,9 +473,9 @@ class algoLogic(optOverNightAlgoLogic):
             # Check for entry signals and execute orders
             if ((timeData-60) in df.index):
 
-                if self.openPnl.empty and self.humanTime.date() == expiryDatetime.date() and self.humanTime.time() >= time(9, 20) and self.humanTime.time() < time(15, 20):
+                if self.openPnl.empty and self.humanTime.date() == expiryDatetime.date() and self.humanTime.time() >= time(9, 16) and self.humanTime.time() < time(15, 20):
 
-                    if StraddlePremium_Cr <= max_straddle_premium * 0.9 and First_Entry == True:
+                    if First_Entry == True:
                         #Entry for CE and PE legs with OTM factor
                         self.strategyLogger.info(f"Straddle premium has reduced by 50% from the maximum premium. Setting reference value to current straddle premium: {refrence_value} for future comparisons.")
 

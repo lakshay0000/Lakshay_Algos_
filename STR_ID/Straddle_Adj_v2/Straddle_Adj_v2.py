@@ -253,6 +253,7 @@ class algoLogic(optOverNightAlgoLogic):
             if original_pe_price is not None and pe_refs:
 
                 if original_pe_price >= pe_refs[-1] * gain_factor:
+                    self.strategyLogger.info(f"th: {pe_refs[-1] * gain_factor}")
                     # Pick a CE strike with premium > floor; walk ITM if ATM is too cheap
                     callSym, new_ce_data = self._strike_with_floor(
                         self.getCallSym, baseSym, spot, lastIndexTimeData[1], premium_floor, expiry=Currentexpiry)
@@ -344,8 +345,8 @@ if __name__ == "__main__":
     version = "v1"
 
     # Define Start date and End date
-    startDate = datetime(2026, 4, 1, 9, 15)
-    endDate = datetime(2026, 12, 31, 15, 30)
+    startDate = datetime(2026, 2, 24, 9, 15)
+    endDate = datetime(2026, 2, 24, 15, 30)
 
     # Create algoLogic object
     algo = algoLogic(devName, strategyName, version)

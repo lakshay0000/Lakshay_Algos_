@@ -311,9 +311,15 @@ class algoLogic(optOverNightAlgoLogic):
                     self.strategyLogger.info(f"Straddle Premium at {self.humanTime} is {StraddlePremium_Cr}")
 
                     # Update maximum premium
-                    if StraddlePremium_Cr > max_straddle_premium:
-                        max_straddle_premium = StraddlePremium_Cr
-                        self.strategyLogger.info(f"New highest premium: {max_straddle_premium}")
+                    # if StraddlePremium_Cr > max_straddle_premium:
+                    #     max_straddle_premium = StraddlePremium_Cr
+                    #     self.strategyLogger.info(f"New highest premium: {max_straddle_premium}")
+
+                    if refrence_value is None:
+                        refrence_value = StraddlePremium_Cr
+                        self.strategyLogger.info(f"Reference value set to {refrence_value} at {self.humanTime}.")
+
+                    
 
 
                 except Exception as e:
@@ -475,7 +481,7 @@ class algoLogic(optOverNightAlgoLogic):
 
                 if self.openPnl.empty and self.humanTime.date() == expiryDatetime.date() and self.humanTime.time() >= time(9, 20) and self.humanTime.time() < time(15, 20):
 
-                    if StraddlePremium_Cr <= max_straddle_premium * 0.9 and First_Entry == True:
+                    if StraddlePremium_Cr < refrence_value and First_Entry == True:
                         #Entry for CE and PE legs with OTM factor
                         self.strategyLogger.info(f"Straddle premium has reduced by 50% from the maximum premium. Setting reference value to current straddle premium: {refrence_value} for future comparisons.")
 
