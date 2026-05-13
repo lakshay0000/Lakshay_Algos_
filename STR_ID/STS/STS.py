@@ -168,7 +168,7 @@ class algoLogic(optOverNightAlgoLogic):
             # Log an exception if data retrieval fails
             self.strategyLogger.info(
                 f"Data not found for {baseSym} in range {startDate} to {endDate}")
-            raise Exception(e)
+            raise Exception(e)   
 
         # Drop rows with missing values
         df.dropna(inplace=True)
@@ -180,6 +180,7 @@ class algoLogic(optOverNightAlgoLogic):
 
 
         lastIndexTimeData = [0, 0]
+        
 
         Currentexpiry = getExpiryData(startEpoch, baseSym)['CurrentExpiry']
         expiryDatetime = datetime.strptime(Currentexpiry, "%d%b%y").replace(hour=15, minute=20)
