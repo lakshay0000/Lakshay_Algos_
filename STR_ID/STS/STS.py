@@ -180,7 +180,6 @@ class algoLogic(optOverNightAlgoLogic):
 
 
         lastIndexTimeData = [0, 0]
-        
 
         Currentexpiry = getExpiryData(startEpoch, baseSym)['CurrentExpiry']
         expiryDatetime = datetime.strptime(Currentexpiry, "%d%b%y").replace(hour=15, minute=20)
